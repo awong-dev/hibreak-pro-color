@@ -304,7 +304,23 @@ UNMOUNTALL  unmount + shrink
 REPACK      → new super image
 ```
 
-Then (RED): `python mtk.py w super work/super/new_super.bin` — takes ~17 min.
+Then (RED): `bin/mtk w super work/super/super.new.bin` — takes ~17 min.
+
+⚠️ **Then disable dm-verity, or it will not boot.** `system`/`vendor`/`product`/
+`system_ext` are hashtree-protected; debloating changes their contents so the
+root hashes no longer match. Unlocking does **not** cover this — it relaxes AVB
+*signature* checking, while dm-verity is a kernel mechanism driven by the
+hashtree and indifferent to lock state. Symptom: preloader dies ~4 s in, retries,
+drops to fastboot, with `slot-successful:a` still `yes`.
+
+```
+fastboot --disable-verity --disable-verification flash vbmeta_a        work/backup/out/vbmeta_a.bin
+fastboot --disable-verity --disable-verification flash vbmeta_system_a work/backup/out/vbmeta_system_a.bin
+fastboot --disable-verity --disable-verification flash vbmeta_vendor_a work/backup/out/vbmeta_vendor_a.bin
+```
+
+Flags precede `flash` (§7.4 has the older ordering). Once set they persist, so a
+later GSI flash need not repeat it.
 
 **Agent responsibilities here:** before REPACK, enumerate what SAFEDEBLOAT removes and
 cross-check against packages referenced by `ro.vendor.xrz.*` props, the EInk Center app,

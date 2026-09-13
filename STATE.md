@@ -133,6 +133,13 @@ Everything below happened 2026-09-12, one session.
 - ✅ **`xSettings` is NOT in the debloat removal list.** The last blocking
   unknown for objective 3 is cleared.
 
+### §6.2 debloat — DONE, BOOTING
+- Verified on-device after boot: `bookmall`, `appstore`, `youtube`, `music`
+  **removed**; `com.xrz.sys.control`, `res.service`, `mutidisplay` **present**.
+  The review's verdict that the removal list is safe for the e-ink stack is now
+  confirmed empirically, not just by analysis.
+- **It did NOT boot at first.** Cause: dm-verity. See Traps.
+
 ### §6.2 debloat — FLASHED
 - Ran `tools/debloat/0[2-5]` and flashed `super.new.bin`. Images shrank:
   product 2.62→1.34 GB, system 2.43→2.15 GB, system_ext 738→683 MB,
@@ -232,6 +239,19 @@ claim in this file that VNDK absence *blocks* a GSI was wrong.
 ---
 
 ## Traps hit
+- **A debloated super will not boot until dm-verity is disabled.** `system`,
+  `vendor`, `product`, `system_ext` carry hashtree descriptors; changing their
+  contents invalidates the root hashes and the kernel refuses to mount them.
+  Symptom: preloader starts, dies ~4 s in, retries once, falls back to fastboot
+  — while `slot-successful:a` still reads `yes` and `slot-retry-count:a` still
+  `7`, because LK never records a failed slot. Fix:
+  `fastboot --disable-verity --disable-verification flash vbmeta{,_system,_vendor}_a`
+  with our own dumps (flags **before** `flash`).
+  → Being unlocked does not help: unlocking relaxes AVB *signature* checking,
+  dm-verity is a separate kernel mechanism driven by the hashtree. Magisk's
+  patched `boot` booting fine without this is misleading — `boot` carries a
+  *hash* descriptor, not a hashtree. I reasoned from that and got it wrong.
+  Once set, the flags persist across later flashes.
 - **mtkclient hangs at "Uploading stage 2" in BROM mode on this device.** Stage 2
   runs from DRAM which BROM has not initialised; mtkclient's search for a DRAM
   config matches the storage CID against bundled preloaders, but that code is

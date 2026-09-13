@@ -53,6 +53,34 @@ Output: `/work/super/super.new.bin`. Flashing it is **RED** (§2.1):
 bin/mtk w super work/super/super.new.bin --preloader work/backup/out/preloader_boot1.bin
 ```
 
+### ⚠️ You MUST disable dm-verity, or it will not boot
+
+`system`, `vendor`, `product` and `system_ext` are hashtree-protected. The
+debloat changes their contents, so their verity root hashes no longer match and
+the kernel refuses to mount them. Symptom: preloader starts, dies in ~4 s,
+retries once, falls back to fastboot — with `slot-successful:a` still `yes` and
+`slot-retry-count:a` still `7`, because LK never gets far enough to record a
+failed slot.
+
+Being unlocked does **not** save you. Unlocking relaxes AVB *signature*
+checking; dm-verity is a separate kernel mechanism driven by the hashtree
+descriptors and does not care about lock state. (Magisk's patched `boot` boots
+fine without this, which is misleading — `boot` carries a *hash* descriptor, not
+a hashtree.)
+
+After flashing super, in fastboot — note the flags precede `flash`:
+
+```
+fastboot --disable-verity --disable-verification flash vbmeta_a        work/backup/out/vbmeta_a.bin
+fastboot --disable-verity --disable-verification flash vbmeta_system_a work/backup/out/vbmeta_system_a.bin
+fastboot --disable-verity --disable-verification flash vbmeta_vendor_a work/backup/out/vbmeta_vendor_a.bin
+fastboot reboot
+```
+
+These write our own dumps back with two header flags flipped — content
+identical to stock, only enforcement changes. Once set, the flags persist, so a
+later GSI flash does not need to repeat this.
+
 ~17 minutes. Keep `work/backup/out/super.bin` — writing it back is the
 documented recovery for a black screen (§9).
 
