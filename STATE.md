@@ -107,6 +107,32 @@ Everything below happened 2026-09-12, one session.
   Magisk UI; `scrcpy` was what made that UI usable, since the e-ink panel
   redraws too poorly to trust toggle state.
 
+### Kernel driver mapped (rooted)
+- 360 `eink` symbols from `/proc/kallsyms` → `work/research/kallsyms-eink.txt`.
+- **Six DRM ioctls** on `/dev/dri/card0`: update, get_type, **reload_waveform**,
+  wait_vsync, create/release_user_fence.
+- **CFA colour pipeline is kernel-side NEON**: `eink_process_color_neon`,
+  `eink_color_mapping{,_region,_AIE,_AIE_region,_cvt}`,
+  `eink_color_enhance_process*`, `set_eink_dither_mp`. `remap_eink_mode` carries
+  `disable_regal` / `disable_4bit_switch` — there is a **Regal** path.
+- **Waveform comes from LK**, not a file (`eink_init_waveform_from_lk`) — which
+  finally explains why `/data/waveform.bin` does not exist.
+- **Structural conclusion**: a GSI replaces libgui/SurfaceFlinger/framework but
+  replaces none of the above. Panel driver, colour mapping, waveform and the
+  ioctl API all survive. A GSI loses the *policy* layer, not the ability to
+  drive the panel.
+
+### EInk Center install source — RESOLVED
+- `/system/app/xSettings/xSettings.apk` bundles `assets/apk/xMenu.apk`
+  (3,151,521 bytes — exact size match for `com.xrz.sys.control`), plus
+  StandbyApp, FaceRegister, SouGoInput, DawoYuji, LevBoll. Settings installs
+  them on first boot, hence `installerPackageName=com.android.settings`.
+- The init `preinstall` service pointing at `/system/preinstall` is a red
+  herring — that path does not exist, `pm preinstall` does nothing, and
+  `xrz_start.sh` touches `/data/preinstall.done` regardless.
+- ✅ **`xSettings` is NOT in the debloat removal list.** The last blocking
+  unknown for objective 3 is cleared.
+
 ### §6.2 review (no flashing yet)
 - `super.bin` unpacked with `lpunpack` in ~10 s → `work/super/`. Inspected with
   `debugfs` — no mount, no container, no root.
@@ -131,13 +157,13 @@ Everything below happened 2026-09-12, one session.
   captures in `eink_debug-{ls,values}.txt`. Driver is `v4.92_20251104`,
   VCOM −2250 mV, temperature 29 °C, `frame_mode=0x4` (= `GC16` in the mono
   table, so the numbering carries over).
-- R4 EInk Center mapping — **mostly answered, by a better route than
-  sysfs-diffing.** Settings are **per-app**, in a SQLite DB
+- R4 EInk Center mapping — **ANSWERED**. *Policy*: per-app SQLite DB
   (`com.xrz.eink.display.policy`) seeded from `/system/etc/display_policy`
-  (101 KB JSON, 228 package policies). Full schema + observed value ranges in
-  `eink-stack.md`. ⚠️ Still open: `saturation`/`contrast` are read-only in
-  debugfs, so their write path is elsewhere — likely an ioctl on
-  `/dev/dri/card0`, or the SurfaceFlinger route.
+  (101 KB JSON, 228 packages). *Mechanism*: the debugfs nodes **are** the write
+  path — `eink_saturation_write`, `eink_global_dither_write`,
+  `eink_global_mode_write`, `eink_wf_ota_write`, `eink_manual_refresh_write` all
+  exist in the kernel. The `r--r--r--` mode bits understate the driver; root can
+  override. No hidden ioctl. **Writing them is RED.**
 - R5 CFA-specific modes — **ANSWERED**. Colour is a **separate enum** from
   `EinkRefreshMode`: `COLOR_MODE_DEFAULT/COMIC/MAGAZINE/VIDEO/CUSTOM`, applied
   **per package**. Values decoded from the shipped policy: **`3` = VIDEO**
@@ -158,26 +184,21 @@ Everything below happened 2026-09-12, one session.
 - 🔴 `repack.sh` silently drops `system_b` (~57 MB of real extents).
 - ⚠️ `hosts.txt` is absent from the repo and there is no `set -e`, so the
   telemetry half of `safedebloat.sh` no-ops while reporting success.
-- ⚠️ **Unresolved**: EInk Center (`com.xrz.sys.control`) lives in `/data/app`,
-  not `/system`. The init service runs `xrz_start.sh preinstall
-  /system/preinstall`, but that directory does not exist in this image, and the
-  recorded installer is `com.android.settings`. So what happens to EInk Center
-  after flashing a debloated super and wiping is **not established**.
+- ✅ ~~Unresolved: EInk Center source~~ — **resolved**, see above. It ships
+  inside `xSettings.apk`, which the debloat does not touch.
 
 ---
 
 ## Next
-1. Confirm `COLOR_MODE_COMIC` vs `MAGAZINE` (1 vs 2) — set a comic app's colour
-   mode in EInk Center, then read `com.xrz.eink.display.policy` back. Needs the
-   human to toggle; the readback is GREEN.
-2. Find the `saturation`/`contrast` **write path**. Next place to look is the
-   ioctl table on `/dev/dri/card0` alongside `drm_eink_update_ioctl`.
-3. Investigate **`drm_eink_update_ioctl`** as a GSI-independent refresh path —
-   a DRM ioctl survives losing Bigme's `libgui.so`, so it may be the answer to
-   objective 4. This is the highest-value open thread.
-4. Resolve the EInk Center install source, now possible with root.
-5. §6.2 debloat, only after applying the fixes in `debloat-review.md`.
-6. §7 GSI. Vendor is Android **12**; `max-download-size` is 128 MiB.
+1. **§6.2 debloat** — now unblocked. Apply the three fixes in
+   `debloat-review.md` (`--virtual-ab` above all), then unpack/mount/debloat/
+   repack in `bin/hibreak-shell`, then RED-flash `mtk w super`.
+2. Confirm `COLOR_MODE_COMIC` vs `MAGAZINE` (1 vs 2) — human sets a comic app's
+   colour mode in EInk Center, readback of the DB is GREEN.
+3. Reverse the **ioctl numbers** for the six `drm_eink_*_ioctl` entries and the
+   structs they take. That is what a GSI-side panel driver would need, and it is
+   offline work on the kernel in `boot_a`.
+4. §7 GSI. Vendor is Android **12**; `max-download-size` is 128 MiB.
 
 ---
 

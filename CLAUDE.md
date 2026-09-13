@@ -361,7 +361,7 @@ root; R5 has leads.** Detail in `work/research/eink-stack.md`.
 | R1 | ✅ **ANSWERED** — partition is literally `waveform`, 16 MiB at `0x4cd00000`, **no A/B counterpart**. A MediaTek image header (`0x58881688`, name `waveform`) wrapping a 6,482,960-byte E Ink `.awf` at offset `0x200`, plus a trailing MediaTek signature block. Panel `EC061KH1C1`, controller `SC1452-FAB`. Extracted → `work/research/waveform.awf` | |
 | R2 | ✅ **ANSWERED, confirmed on-device** — the `waveform` **partition** is the live source. `machine_waveform` reports byte-for-byte the string embedded in our dump. `/system/bin/xrz_updater --update-waveform` is the writer. ⚠️ `/data/waveform.bin`/`.bak` appear in `system_a` strings but **do not exist** on a running device — not part of the live path | |
 | R3 | ✅ **ANSWERED** — enumerated on rooted stock: **23 nodes**, not the 5 strings suggested. Driver `v4.92_20251104`, VCOM `-2250` mV, temp `29`, `frame_mode=0x4`. Writable: `anti_alias`, `anti_flicker`, `clean_a2`, `enable`, `print_level`, `save_level`. Full table + values in `work/research/eink-stack.md` | |
-| R4 | **Mostly answered by a better route than sysfs-diffing.** Settings are **per-app**, kept in a SQLite DB (`com.xrz.eink.display.policy`) seeded from `/system/etc/display_policy` (101 KB **JSON**). Schema and observed value ranges in `eink-stack.md`. ⚠️ Still open: `saturation`/`contrast` are **read-only** in debugfs, so the write path is elsewhere — likely an ioctl on `/dev/dri/card0` or the SurfaceFlinger route, *not* sysfs. **Writes to `/sys/…` are RED (§2.1)** |
+| R4 | ✅ **ANSWERED.** Two layers. *Policy*: per-app, in a SQLite DB (`com.xrz.eink.display.policy`) seeded from `/system/etc/display_policy` (101 KB **JSON**, 228 packages). *Mechanism*: the debugfs nodes **are** the write path — `saturation`, `global_dither`, `global_mode`, `wf_ota`, `manual_refresh` all have `*_write` handlers in the kernel; their `r--r--r--` mode bits understate the driver and root can override. There is no hidden ioctl. **Writing them is RED (§2.1)** |
 | R5 | ✅ **ANSWERED** — the CFA modes are a **separate enum** from `EinkRefreshMode`: `COLOR_MODE_DEFAULT/COMIC/MAGAZINE/VIDEO/CUSTOM`, in `xrz.framework.server.jar`. Values decoded from `/system/etc/display_policy`: **`3` = VIDEO** (all 11 users are video apps), `4` = CUSTOM, `0` = DEFAULT. ⚠️ `1` vs `2` (COMIC/MAGAZINE) rests on declaration order — unconfirmed. Colour is set **per-app**, not globally |
 | R6 | ✅ **ANSWERED** — four non-AOSP exports, not one: `repaintEverything()`, `setLayerRefreshMode(String8 const&, uint)`, `Transaction::setRefreshMode(sp<SurfaceControl> const&, int)`, **and a new AIDL binder method** `ISurfaceComposer::remoteSetLayerRefreshMode`. Java side is `xrz.framework.manager.XrzEinkManager` via `libXrzFramework_runtime.so` | |
 
@@ -400,11 +400,34 @@ MT6877 on kernel **4.19.191** → **ICN6211** MIPI-to-RGB bridge → **SC1452-FA
 EPD controller → `EC061KH1C1` panel, with a **TPS65185** ("papyrus") EPD PMIC.
 VCOM −2250 mV.
 
-**`drm_eink_update_ioctl` is the refresh entry point** — one per update, 2–15 ms.
-It is a **DRM ioctl**, so it is reachable from userspace *independently of
-SurfaceFlinger*. Bigme's `libgui.so` additions vanish on a GSI; this does not.
-Strong candidate for objective 4 — investigate before assuming a GSI needs the
-whole vendor framework.
+### The kernel is where the panel actually lives — and a GSI keeps it
+
+This is the most important structural fact found so far. From `/proc/kallsyms`
+(360 `eink` symbols, full detail in `work/research/eink-stack.md`):
+
+**Six DRM ioctls** on `/dev/dri/card0`, a complete userspace API:
+
+```
+drm_eink_update_ioctl              drm_eink_get_type_ioctl
+drm_eink_reload_waveform_ioctl     drm_eink_wait_vsync_ioctl
+drm_eink_create_user_fence_ioctl   drm_eink_release_user_fence_ioctl
+```
+
+**The CFA colour pipeline is kernel-side NEON code**, not a HAL and not Java:
+`eink_process_color_neon`, `eink_color_mapping{,_region,_AIE,_AIE_region,_cvt}`,
+`eink_color_enhance_process*`, `set_eink_dither_mp`. `remap_eink_mode` even
+carries `disable_regal` / `disable_4bit_switch` flags — there is a **Regal** path.
+
+**The waveform arrives from LK**, not from a file: `eink_init_waveform_from_lk`.
+The bootloader reads the `waveform` partition and hands the blob to the kernel
+before Android starts.
+
+Therefore: a GSI replaces `libgui.so`, SurfaceFlinger, the framework and
+`xrz.framework.server.jar` — but it replaces **none** of the above. The panel
+driver, the colour mapping, the waveform and the ioctl API all survive. What a
+GSI loses is the *policy* layer deciding which mode to use when, not the ability
+to drive the panel. **"A GSI can't drive this panel" is probably wrong.** This is
+the route to objective 4, and the reason objective 5 may be reachable at all.
 
 ### 7.3 GSI selection
 
