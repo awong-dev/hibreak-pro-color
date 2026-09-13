@@ -362,7 +362,7 @@ root; R5 has leads.** Detail in `work/research/eink-stack.md`.
 | R2 | ✅ **ANSWERED, confirmed on-device** — the `waveform` **partition** is the live source. `machine_waveform` reports byte-for-byte the string embedded in our dump. `/system/bin/xrz_updater --update-waveform` is the writer. ⚠️ `/data/waveform.bin`/`.bak` appear in `system_a` strings but **do not exist** on a running device — not part of the live path | |
 | R3 | ✅ **ANSWERED** — enumerated on rooted stock: **23 nodes**, not the 5 strings suggested. Driver `v4.92_20251104`, VCOM `-2250` mV, temp `29`, `frame_mode=0x4`. Writable: `anti_alias`, `anti_flicker`, `clean_a2`, `enable`, `print_level`, `save_level`. Full table + values in `work/research/eink-stack.md` | |
 | R4 | ✅ **ANSWERED.** Two layers. *Policy*: per-app, in a SQLite DB (`com.xrz.eink.display.policy`) seeded from `/system/etc/display_policy` (101 KB **JSON**, 228 packages). *Mechanism*: the debugfs nodes **are** the write path — `saturation`, `global_dither`, `global_mode`, `wf_ota`, `manual_refresh` all have `*_write` handlers in the kernel; their `r--r--r--` mode bits understate the driver and root can override. There is no hidden ioctl. **Writing them is RED (§2.1)** |
-| R5 | ✅ **ANSWERED** — the CFA modes are a **separate enum** from `EinkRefreshMode`: `COLOR_MODE_DEFAULT/COMIC/MAGAZINE/VIDEO/CUSTOM`, in `xrz.framework.server.jar`. Values decoded from `/system/etc/display_policy`: **`3` = VIDEO** (all 11 users are video apps), `4` = CUSTOM, `0` = DEFAULT. ⚠️ `1` vs `2` (COMIC/MAGAZINE) rests on declaration order — unconfirmed. Colour is set **per-app**, not globally |
+| R5 | ✅ **ANSWERED** — the CFA modes are a **separate enum** from `EinkRefreshMode`: `COLOR_MODE_DEFAULT/COMIC/MAGAZINE/VIDEO/CUSTOM`, in `xrz.framework.server.jar`. Values: `0` DEFAULT, `1` MAGAZINE *(by elimination, untested)*, **`2` COMIC ✅ measured**, **`3` VIDEO ✅** (all 11 users are video apps), `4` CUSTOM. Colour is set **per-app**, not globally. Live DB is `/data/system/disp_policy.db` |
 | R6 | ✅ **ANSWERED** — four non-AOSP exports, not one: `repaintEverything()`, `setLayerRefreshMode(String8 const&, uint)`, `Transaction::setRefreshMode(sp<SurfaceControl> const&, int)`, **and a new AIDL binder method** `ISurfaceComposer::remoteSetLayerRefreshMode`. Java side is `xrz.framework.manager.XrzEinkManager` via `libXrzFramework_runtime.so` | |
 
 Mono-model `EinkRefreshMode` codes. ✅ **Confirmed to apply to this device** —
@@ -378,11 +378,13 @@ AUTO 32768`
 **CFA colour modes — a different enum entirely** (`xrz.framework.server.jar`),
 applied **per package**:
 
-`COLOR_MODE_DEFAULT 0 · COLOR_MODE_COMIC 1? · COLOR_MODE_MAGAZINE 2? ·
+`COLOR_MODE_DEFAULT 0 · COLOR_MODE_MAGAZINE 1? · COLOR_MODE_COMIC 2 ✅ ·
 COLOR_MODE_VIDEO 3 ✅ · COLOR_MODE_CUSTOM 4`
 
-`3 = VIDEO` is solid — every one of its 11 users in `/system/etc/display_policy`
-is a video app. `1`/`2` are assumed from declaration order and need confirming.
+`2 = COMIC` was **measured** — setting Comic in EInk Center moved
+`com.android.launcher3` from `0` to `2` in `/data/system/disp_policy.db`.
+`3 = VIDEO` is solid: all 11 of its users are video apps. Only `1 = MAGAZINE`
+is still unverified, and now rests purely on elimination.
 
 Frontlight path ✅ **confirmed on this unit**:
 `/sys/devices/platform/11d01000.i2c7/i2c-7/7-0036` → `lm3630a_cold_light`,

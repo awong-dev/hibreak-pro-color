@@ -166,11 +166,12 @@ Everything below happened 2026-09-12, one session.
   override. No hidden ioctl. **Writing them is RED.**
 - R5 CFA-specific modes — **ANSWERED**. Colour is a **separate enum** from
   `EinkRefreshMode`: `COLOR_MODE_DEFAULT/COMIC/MAGAZINE/VIDEO/CUSTOM`, applied
-  **per package**. Values decoded from the shipped policy: **`3` = VIDEO**
-  (all 11 users are video apps — iQiyi, Youku, Douyin, Kuaishou, Tencent Video…),
-  `4` = CUSTOM (dialer), `0` = DEFAULT. ⚠️ `1` vs `2` (COMIC/MAGAZINE) rests on
-  declaration order only — confirm by setting a comic app in EInk Center and
-  reading the DB back.
+  **per package**. `0` DEFAULT · `1` MAGAZINE *(elimination only, untested)* ·
+  **`2` COMIC ✅ measured** · **`3` VIDEO ✅** (all 11 users are video apps) ·
+  `4` CUSTOM. Live DB is `/data/system/disp_policy.db`, table `policy_org`.
+  ⚠️ An earlier note here claimed 1=COMIC/2=MAGAZINE "from declaration order";
+  that order was actually alphabetical from `sort`, i.e. not evidence, and the
+  measurement contradicts it.
 - R6 Bigme `libgui.so` — **ANSWERED**, and larger than §7.1 described. Four
   non-AOSP exports: `repaintEverything()`,
   `setLayerRefreshMode(String8 const&, uint)`,
@@ -193,8 +194,8 @@ Everything below happened 2026-09-12, one session.
 1. **§6.2 debloat** — now unblocked. Apply the three fixes in
    `debloat-review.md` (`--virtual-ab` above all), then unpack/mount/debloat/
    repack in `bin/hibreak-shell`, then RED-flash `mtk w super`.
-2. Confirm `COLOR_MODE_COMIC` vs `MAGAZINE` (1 vs 2) — human sets a comic app's
-   colour mode in EInk Center, readback of the DB is GREEN.
+2. `COLOR_MODE_MAGAZINE = 1` is the last untested cell — same method: set
+   Magazine on any app, diff `/data/system/disp_policy.db`.
 3. Reverse the **ioctl numbers** for the six `drm_eink_*_ioctl` entries and the
    structs they take. That is what a GSI-side panel driver would need, and it is
    offline work on the kernel in `boot_a`.
