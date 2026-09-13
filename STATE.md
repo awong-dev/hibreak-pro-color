@@ -1,7 +1,17 @@
 ## Status
-Phase: **3** (GSI) — **a GSI boots.** Android 16 on the Android 12 vendor,
-`boot_completed=1`, root via phh su. Blocker is the **Mali GPU driver**, not
-e-ink. See `work/research/gsi-attempt-1.md`.
+**Device reverted to factory stock 2026-09-13** — stock `super`, stock `boot`
+(unrooted), dm-verity re-enabled, userdata wiped. Bootloader left **unlocked**
+(`verifiedbootstate: orange`, which is what unlocked means — not a fault).
+Relocking deliberately **not** done: it is the only unrecoverable step and buys
+back nothing but the `green` state, since the warranty bit is permanently
+tripped either way.
+
+Research state below is preserved. All images needed to return to the GSI or the
+debloated build are on disk and verified; see `work/releases/` and `work/gsi/`.
+
+Phase reached: **3** (GSI) — a GSI *boots* (Android 16 on the Android 12
+vendor, root via phh su). Display remains tiled: a **4:1 pixel-packing
+mismatch**, diagnosed but not fixed. See `docs/gsi-display-analysis.md`.
 Backup verified: **y** — restore path **proven** by §5.4
 Bootloader: **UNLOCKED** — `unlocked: yes`, `secure: no`, warranty bit tripped
 Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`, **rooted (Magisk 30.7)**
