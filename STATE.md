@@ -223,6 +223,12 @@ claim in this file that VNDK absence *blocks* a GSI was wrong.
 ---
 
 ## Next
+0. **Reference measurement**: boot the saved debloated stock and read
+   `/sys/kernel/debug/dri/0/framebuffer` + `/dev/kernel/debug/dri/0/state`
+   during a refresh, to learn what `format`/`modifier`/`pitch` a *working*
+   display uses. Everything about the GSI's tiling has been guesswork without
+   this. Revert to GSI afterwards with
+   `fastboot flash system work/gsi/td16-system.img`.
 1. **Try TrebleDroid A15** (`work/gsi/td15-system.img`, downloaded). One release
    closer to the A12 vendor; its Skia may tolerate this Mali blob. Cheapest
    meaningful test of the GPU problem.
