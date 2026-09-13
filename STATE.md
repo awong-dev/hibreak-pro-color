@@ -48,15 +48,25 @@ Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
 - R6 Bigme `libgui.so` diff — not started
 
 ## Next
-1. Confirm fastboot mode works at all on this device — never exercised. GREEN:
-   `adb reboot bootloader` then `fastboot devices`.
-2. §6.1 unlock (RED — human runs). **`md_udc` does not exist on this device**;
-   §6.1's `mtk e metadata,userdata,md_udc` must drop that name or the erase
-   fails on it.
-3. After unlock the wipe clears Developer Options — re-enable USB debugging
-   before anything else expects adb.
-4. Then §6.2: dump the *new* super post-unlock? No — our `super.bin` is from
-   this firmware and is what the debloat must be built against (§6.2 trap).
+1. §6.1 unlock (RED — human runs). Device is sitting in fastboot now.
+   **`md_udc` does not exist on this device** — §6.1's
+   `mtk e metadata,userdata,md_udc` must drop that name or the erase fails.
+2. After unlock the wipe clears Developer Options — re-enable USB debugging
+   and MTP before anything expects adb.
+3. Then §6.2 debloat. Build it against the `super.bin` we already have: it came
+   off this exact firmware, which is precisely what the §6.2 trap demands. No
+   re-dump needed.
+
+## Phase 2 started
+- [2026-09-12] Fastboot exercised read-only. Works; `fastboot getvar all` saved
+  to `work/research/fastboot-getvar.txt`, summarised in `device-identity.md`.
+  - `unlocked: no`, `secure: yes`, `warranty: yes` (not yet tripped).
+  - `slot-successful:b: no` — **independent confirmation slot B was never used**,
+    from a different source than the dump. The all-zero `_b` partitions are real.
+  - `is-userspace: no` — LK fastboot, not fastbootd. Logical partitions need
+    `fastboot reboot fastboot` first (§7.4 already does this).
+  - `max-download-size` 128 MiB — larger images must sparse-split over fastboot.
+  - Battery 4300 mV, `battery-soc-ok: yes`.
 
 ## Phase 1 closed
 - [2026-09-12] §5.4 write path **proven**. `bin/mtk w vbmeta_a` with our own
