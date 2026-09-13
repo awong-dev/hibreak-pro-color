@@ -1,5 +1,5 @@
 ## Status
-Phase: 1 complete → 2   Backup verified: **y** (2026-09-12)
+Phase: **2**   Backup verified: **y**, restore path **proven** (2026-09-12)
 Bootloader: locked (OEM unlock toggle ON)
 Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
 
@@ -48,12 +48,23 @@ Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
 - R6 Bigme `libgui.so` diff — not started
 
 ## Next
-1. §5.4 prove the write path (RED — human runs). Re-write a partition with its
-   own backup copy:
-   `bin/mtk w vbmeta_a work/backup/out/vbmeta_a.bin`
-   Mind the post-flash boot quirk (§3). This is the last step of phase 1.
-2. Then §6.1 unlock (RED). Note `md_udc` does **not** exist on this device, so
-   §6.1's `mtk e metadata,userdata,md_udc` needs that name dropped.
+1. Confirm fastboot mode works at all on this device — never exercised. GREEN:
+   `adb reboot bootloader` then `fastboot devices`.
+2. §6.1 unlock (RED — human runs). **`md_udc` does not exist on this device**;
+   §6.1's `mtk e metadata,userdata,md_udc` must drop that name or the erase
+   fails on it.
+3. After unlock the wipe clears Developer Options — re-enable USB debugging
+   before anything else expects adb.
+4. Then §6.2: dump the *new* super post-unlock? No — our `super.bin` is from
+   this firmware and is what the debloat must be built against (§6.2 trap).
+
+## Phase 1 closed
+- [2026-09-12] §5.4 write path **proven**. `bin/mtk w vbmeta_a` with our own
+  dump; device booted first time, no boot quirk needed.
+  `verifiedbootstate=green` afterwards — AVB *validated the partition we wrote*,
+  which is stronger proof than a successful boot alone: a byte-wrong vbmeta
+  would have gone orange/red or refused to boot. Slot still `_a`,
+  `sys.oem_unlock_allowed` still 1.
 
 ## Gate
 - [2026-09-12] `work/backup/VERIFIED` written, `work/backup` chmod a-w
