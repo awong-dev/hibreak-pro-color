@@ -1,0 +1,17 @@
+# /system/etc/hosts for the debloated super.
+#
+# Upstream's safedebloat.sh copies a hosts.txt that is not in its repo, so with
+# no `set -e` the cp failed and the whole telemetry step silently did nothing.
+# This is a deliberately small replacement: the loopback entries Android needs,
+# plus the vendor endpoint this device actually ships pointing at.
+#
+# Keep it conservative. A giant blocklist here is hard to debug later, breaks in
+# surprising ways, and is easier to maintain with a proper DNS filter.
+
+127.0.0.1       localhost
+::1             ip6-localhost
+
+# ro.build.locale.area on this firmware is http://ereader.xrztech.com:8090
+127.0.0.1       ereader.xrztech.com
+127.0.0.1       xrztech.com
+127.0.0.1       www.xrztech.com

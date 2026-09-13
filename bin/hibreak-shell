@@ -6,6 +6,9 @@
 # Loop mounts over the virtiofs bind mount are verified working, so images can
 # live in ./work rather than being copied into the VM.
 #
+# Our corrected debloat scripts are at /debloat (upstream's, unfixed, at
+# /scripts -- see tools/debloat/README.md for why ours differ).
+#
 #   bin/hibreak-shell                 # interactive
 #   bin/hibreak-shell lpdump /work/super/super.bin
 set -euo pipefail
@@ -16,5 +19,6 @@ docker image inspect hibreak-tools >/dev/null 2>&1 || "$ROOT/tools/docker/build.
 TTY=""; if [ -t 0 ] && [ -t 1 ]; then TTY="-t"; fi
 exec docker run --rm -i $TTY --privileged \
   -v "$ROOT/work:/work" \
+  -v "$ROOT/tools/debloat:/debloat:ro" \
   -v "$ROOT/tools/hibreak_pro_color_scripts:/scripts:ro" \
   -w /work hibreak-tools "${@:-bash}"
