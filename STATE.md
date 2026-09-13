@@ -1,7 +1,7 @@
 ## Status
 Phase: **2**   Backup verified: **y**, restore path **proven** (2026-09-12)
 Bootloader: **UNLOCKED** (2026-09-12) — `unlocked: yes`, `secure: no`,
-warranty bit tripped. `unlock_critical` still pending.
+warranty bit tripped. Device wiped and booted clean.
 Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
 
 ## Done
@@ -65,6 +65,22 @@ Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
   OKAY: `unlocked` no→yes, `secure` yes→no, `warranty` yes→no.
   Worth posting to the HBPC thread — the usual guidance says to expect a
   physical confirm on this step.
+- [2026-09-12] `unlock_critical` run by the human. **Cannot be independently
+  verified** — MTK's LK exposes no separate getvar for it, so the state reads
+  identical either way. Its real test is flashing a critical partition
+  (`vbmeta`) at §7.4; if that fails on permissions, that is the signal it did
+  not take.
+- [2026-09-12] Rebooted from fastboot. Boot chain observed:
+  fastboot(0x201C) → preloader(0x2000) → Android(0x2008), 101 s.
+  Came up as **PTP-only with no adb** — i.e. Developer Options were wiped,
+  which independently confirms the factory reset happened.
+- **Judgement: skipping §6.1's belt-and-braces `mtk e metadata,userdata` and
+  `mtk da seccfg unlock`.** Those exist because the standard sequence
+  "reportedly needs more" on this model. It did not — the standard sequence
+  unlocked, wiped and booted. Running extra RED writes to fix a problem we do
+  not have is risk without benefit, and `da seccfg unlock` writes the one
+  partition §2.2 singles out as most dangerous. Revisit only if §7.4's vbmeta
+  flash is refused.
 - [2026-09-12] Fastboot exercised read-only. Works; `fastboot getvar all` saved
   to `work/research/fastboot-getvar.txt`, summarised in `device-identity.md`.
   - `unlocked: no`, `secure: yes`, `warranty: yes` (not yet tripped).
