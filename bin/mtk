@@ -1,0 +1,10 @@
+#!/bin/bash
+# mtkclient wrapper: runs mtk.py out of the project venv (python3.11) while
+# keeping the caller's working directory, so relative output paths behave.
+#
+# GREEN:  printgpt, r, rl, rf, rs, ro, gpt
+# RED:    w, wl, wf, e, da seccfg, da vbmeta  -- see CLAUDE.md 2.1. Do not run
+#         these without the human explicitly saying so.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec "$ROOT/tools/venv/bin/python" "$ROOT/tools/mtkclient/mtk.py" "$@"

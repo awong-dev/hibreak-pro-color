@@ -1,0 +1,20 @@
+#!/bin/bash
+# Root shell in the Linux toolbox (Debian) with ./work bind-mounted at /work.
+# Everything that mounts, resizes or fscks a filesystem image happens here --
+# macOS cannot loop-mount ext4. lpunpack/lpmake/simg2img/e2fsprogs are on PATH.
+#
+# Loop mounts over the virtiofs bind mount are verified working, so images can
+# live in ./work rather than being copied into the VM.
+#
+#   bin/hibreak-shell                 # interactive
+#   bin/hibreak-shell lpdump /work/super/super.bin
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+docker image inspect hibreak-tools >/dev/null 2>&1 || "$ROOT/tools/docker/build.sh"
+
+# -t only when there's a terminal, so `hibreak-shell lpdump ...` works in a pipe
+TTY=""; if [ -t 0 ] && [ -t 1 ]; then TTY="-t"; fi
+exec docker run --rm -i $TTY --privileged \
+  -v "$ROOT/work:/work" \
+  -v "$ROOT/tools/hibreak_pro_color_scripts:/scripts:ro" \
+  -w /work hibreak-tools "${@:-bash}"
