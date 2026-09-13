@@ -86,16 +86,24 @@ rather than asserting it. Verify by enumeration on-device when possible.
 
 ## 3. Device facts
 
+✅ = verified on this unit over adb, 2026-09-12. Everything else is still
+inherited from the mono model or from the seller's spec sheet — see §2.4.
+
 | | |
 | --- | --- |
-| Model | Bigme HiBreak Pro **Color** (HBPC) |
-| SoC | MediaTek **MT6877** / Dimensity 1080 |
+| Model | Bigme HiBreak Pro **Color** (HBPC) — *the device reports only `ro.product.model=HiBreak`, `ro.product.device=Smartphone`; nothing in software says Pro, Color, Kaleido or CFA* |
+| SoC | MediaTek **MT6877** / Dimensity 1080 ✅ |
 | Memory | 8 GB RAM / 256 GB UFS, no SD |
-| Partitioning | A/B slots, dynamic (`super`) |
-| Stock Android | **14** |
-| Firmware line | **2.x** (2.7, 2.9 known) |
-| Panel | E Ink **Kaleido 3** CFA, 1648×824, 300 ppi mono / 150 ppi colour |
-| Frontlight | 36-level warm/cold, `lm3630a` |
+| Partitioning | **virtual** A/B, dynamic (`super`) ✅ — `ro.virtual_ab.enabled=true`, currently on slot `_a` |
+| Stock Android | system **14** ✅ (sdk 34) — but **vendor/odm are Android 12** ✅ (sdk 31, `ro.vendor.api_level` 30) |
+| Firmware | **`Bigme_HiBreak_V1.0_20251125`** ✅, security patch 2025-11-05. *Not* the 2.x line this file previously assumed |
+| Panel | E Ink **Kaleido 3** CFA, 1648×824 ✅, 300 ppi ✅ mono / 150 ppi colour |
+| Frontlight | 36-level warm/cold, `lm3630a` ✅ |
+| Bootloader | locked ✅ (`flash.locked=1`, `verifiedbootstate=green`), **OEM unlocking toggle on** ✅ (`sys.oem_unlock_allowed=1`) |
+
+Full record and the raw prop dump: `work/research/device-identity.md`.
+`ro.vendor.xrz.screen_type=61` is the most likely panel discriminator if a mono
+dump ever turns up to compare against.
 
 Same SoC/RAM/storage/camera/battery as the mono HiBreak Pro. Different panel, different
 Android base, different firmware line.
@@ -323,13 +331,21 @@ mono Pro, incomplete for CFA):
 GU4 136 · INPUT 137 · CLEAN 176 · HD 177 · NORMAL 178 · FAST 179 · HANDWRITE 1029 ·
 AUTO 32768`
 
-Frontlight path to verify: `/sys/devices/platform/11d01000.i2c7/i2c-7/7-0036` →
-`lm3630a_cold_light`, `lm3630a_warm_light`.
+Frontlight path ✅ **confirmed on this unit**:
+`/sys/devices/platform/11d01000.i2c7/i2c-7/7-0036` → `lm3630a_cold_light`,
+`lm3630a_warm_light`, `lm3630a_version`.
+
+`ro.vendor.xrz.default_refresh_mode` is **178**, which is `NORMAL` in the table
+above — weak but real support for the mono mode numbering carrying over.
 
 ### 7.3 GSI selection
 
-Vendor is Android 14 → use an **arm64 A/B (`arm64_bvN`) GSI, Android 14 or newer**.
-TrebleDroid, ponces' AOSP, or a LineageOS treble build.
+Vendor is **Android 12** (sdk 31, `ro.vendor.api_level` 30), not 14 — stock runs
+an Android 14 system on top of it. Use an **arm64 A/B (`arm64_bvN`) GSI**;
+Android 14 is known-good on this vendor because that is what stock ships.
+TrebleDroid, ponces' AOSP, or a LineageOS treble build. Going newer than 14 is
+plausible but is one more variable on top of an already-unsolved panel problem —
+match stock first.
 
 Do **not** assume `vbbot`'s prebuilt HiBreak Pro image works here — it targets the mono
 panel and a 1.x vendor. If tried, treat it strictly as a diagnostic.
