@@ -86,20 +86,24 @@ rather than asserting it. Verify by enumeration on-device when possible.
 
 ## 3. Device facts
 
-✅ = verified on this unit over adb, 2026-09-12. Everything else is still
-inherited from the mono model or from the seller's spec sheet — see §2.4.
+✅ = verified on this unit (adb / BROM dump / rooted sysfs), 2026-09-12.
+Everything else is still inherited from the mono model or the seller's spec
+sheet — see §2.4. Live state is in `STATE.md`; this table is the hardware.
 
 | | |
 | --- | --- |
-| Model | Bigme HiBreak Pro **Color** (HBPC) — *the device reports only `ro.product.model=HiBreak`, `ro.product.device=Smartphone`; nothing in software says Pro, Color, Kaleido or CFA* |
+| Model | Bigme HiBreak Pro **Color** (HBPC) — *software reports only `ro.product.model=HiBreak`, `ro.product.device=Smartphone`; nothing in 1230 props says Pro, Color, Kaleido or CFA.* The one corroboration is the panel part number below |
 | SoC | MediaTek **MT6877** / Dimensity 1080 ✅ |
-| Memory | 8 GB RAM / 256 GB UFS, no SD |
+| Memory | 8 GB RAM / **UFS `MT256GAXAT4U31`** ✅, 255,919,652,864 bytes total, no SD. Boot LUNs `LU1`/`LU2` 4 MiB each hold the preloader |
 | Partitioning | **virtual** A/B, dynamic (`super`) ✅ — `ro.virtual_ab.enabled=true`, currently on slot `_a` |
 | Stock Android | system **14** ✅ (sdk 34) — but **vendor/odm are Android 12** ✅ (sdk 31, `ro.vendor.api_level` 30) |
 | Firmware | **`Bigme_HiBreak_V1.0_20251125`** ✅, security patch 2025-11-05. *Not* the 2.x line this file previously assumed |
-| Panel | E Ink **Kaleido 3** CFA, 1648×824 ✅, 300 ppi ✅ mono / 150 ppi colour |
-| Frontlight | 36-level warm/cold, `lm3630a` ✅ |
-| Bootloader | locked ✅ (`flash.locked=1`, `verifiedbootstate=green`), **OEM unlocking toggle on** ✅ (`sys.oem_unlock_allowed=1`) |
+| Panel | E Ink **Kaleido 3** CFA, 1648×824 ✅, 300 ppi ✅ mono / 150 ppi colour. Part **`EC061KH1C1`** ✅, controller **`SC1452-FAB`** ✅, VCOM **−2250 mV** ✅. E Ink's `EC` prefix denotes its colour families — the only non-human evidence for "Color" |
+| Display chain | MT6877 → **ICN6211** MIPI-to-RGB bridge → `SC1452-FAB` → panel; **TPS65185** ("papyrus") EPD PMIC ✅ |
+| Kernel | Linux **4.19.191**, built 2025-11-25 ✅. EPD driver `v4.92_20251104` ✅ |
+| Frontlight | warm/cold `lm3630a` ✅ (V0.0.2 <2022/11/23>). ⚠️ "36-level" is the **UI**; the raw sysfs `lm3630a_cold_light` reads **182**, so the underlying range is wider — don't assume 0–36 when driving it directly |
+| Bootloader | **UNLOCKED** ✅ as of 2026-09-12 (`flash.locked=0`, `verifiedbootstate=orange`, `secure: no`, warranty bit tripped). BROM security is wide open: `SBC`/`SLA`/`DAA` all **false** — that is the safety net the whole recovery story rests on |
+| Boot images | **non-GKI**: `init_boot_a` is all-zero and the 11.5 MB ramdisk lives in `boot_a` (header **v2**, page 2048). Root patches `boot`, **not** `init_boot` |
 
 Full record and the raw prop dump: `work/research/device-identity.md`.
 `ro.vendor.xrz.screen_type=61` is the most likely panel discriminator if a mono
@@ -252,19 +256,34 @@ Unplug, boot (mind the boot quirk). If it comes up, phase 1 is done.
 
 ## 6. Phase 2 — Unlock, then debloated stock
 
-### 6.1 Unlock (RED — human runs, in order)
+### 6.1 Unlock (RED — human runs, in order) — ✅ **DONE 2026-09-12**
 
-Factory-resets the device. HBPC reportedly needs more than the standard sequence.
+Factory-resets the device. ~~HBPC reportedly needs more than the standard
+sequence.~~ **It did not** — the standard two commands were enough.
 
 ```
 adb reboot bootloader
 fastboot devices
-fastboot flashing unlock            # confirm with Vol-Up on device; wait
-fastboot flashing unlock_critical
-# then, in BROM, belt-and-braces:
-python mtk.py e metadata,userdata,md_udc
-python mtk.py da seccfg unlock
+fastboot flashing unlock            # NO on-screen prompt appeared; no Vol-Up
+fastboot flashing unlock_critical   #   press was needed. It just takes it.
 ```
+
+What actually happened, for anyone repeating this:
+
+- `flashing unlock` returned `OKAY` **with no confirmation screen at all**.
+  Don't trust the OKAY — verify with `fastboot getvar unlocked`
+  (`no`→`yes`, `secure` `yes`→`no`, `warranty` `yes`→`no`).
+- `unlock_critical` **cannot be verified** — MTK's LK exposes no getvar for it.
+  Its real test is flashing a critical partition (`vbmeta`) at §7.4.
+- The belt-and-braces BROM pass below was **skipped deliberately** and nothing
+  broke. Extra RED writes against a problem we don't have is risk without
+  benefit, and `da seccfg unlock` touches the partition §2.2 calls most
+  dangerous. Revisit only if §7.4's vbmeta flash is refused.
+
+  ```
+  python mtk.py e metadata,userdata      # NOTE: `md_udc` does NOT exist on this
+  python mtk.py da seccfg unlock         #   device — the original line named it
+  ```
 
 Afterwards the wipe clears Developer Options — re-enable USB debugging and MTP.
 
@@ -333,15 +352,17 @@ success for objective 4. Colour is objective 5.
 
 ### 7.2 Open research questions
 
-Work these on **stock, before flashing anything**, because stock is where the answers are.
+Work these on **stock, before flashing anything**, because stock is where the
+answers are. **Status 2026-09-12: R1, R2, R3 and R6 answered; R4 unblocked by
+root; R5 has leads.** Detail in `work/research/eink-stack.md`.
 
 | # | Question | How to attack |
 | --- | --- | --- |
-| R1 | What is the waveform partition called and what format is the blob? | `printgpt`; `file`/`binwalk`/`strings` the dump; compare against known E Ink `.wbf` structure |
-| R2 | ✅ **ANSWERED** — `/dev/block/by-name/waveform` → `/data/waveform.bin` (+`.bak`) → `/sys/kernel/debug/eink_debug/waveform`, `machine_waveform`. `/system/bin/xrz_updater --update-waveform` is the writer. See `work/research/eink-stack.md` | |
-| R3 | What does `/sys/kernel/debug/eink_debug` actually expose on *this* unit? | Enumerate on rooted stock — **do not assume the mono table below is complete** |
-| R4 | Which sysfs writes correspond to which EInk Center setting? | Poll/diff sysfs while toggling each mode in the stock UI |
-| R5 | Which modes are CFA/colour-specific? | Whatever appears in R4 but not in the mono `EinkRefreshMode` table |
+| R1 | ✅ **ANSWERED** — partition is literally `waveform`, 16 MiB at `0x4cd00000`, **no A/B counterpart**. A MediaTek image header (`0x58881688`, name `waveform`) wrapping a 6,482,960-byte E Ink `.awf` at offset `0x200`, plus a trailing MediaTek signature block. Panel `EC061KH1C1`, controller `SC1452-FAB`. Extracted → `work/research/waveform.awf` | |
+| R2 | ✅ **ANSWERED, confirmed on-device** — the `waveform` **partition** is the live source. `machine_waveform` reports byte-for-byte the string embedded in our dump. `/system/bin/xrz_updater --update-waveform` is the writer. ⚠️ `/data/waveform.bin`/`.bak` appear in `system_a` strings but **do not exist** on a running device — not part of the live path | |
+| R3 | ✅ **ANSWERED** — enumerated on rooted stock: **23 nodes**, not the 5 strings suggested. Driver `v4.92_20251104`, VCOM `-2250` mV, temp `29`, `frame_mode=0x4`. Writable: `anti_alias`, `anti_flicker`, `clean_a2`, `enable`, `print_level`, `save_level`. Full table + values in `work/research/eink-stack.md` | |
+| R4 | **Unblocked (rooted), not yet done.** Poll/diff `eink_debug` while toggling each EInk Center setting. ⚠️ Puzzle to solve first: `saturation` and `contrast` are **read-only** in debugfs, yet `ro.vendor.xrz.default_color_enhance` / `default_contrast_level` exist — so the UI writes them by some other path. Find it. **Writes to `/sys/…` are RED (§2.1)** |
+| R5 | **First real leads.** `saturation`, `global_dither` and `contrast` exist in `eink_debug` and appear nowhere in the mono table; `saturation` is meaningless on a mono panel. `dither_process` runs kernel-side per update. These are the candidates |
 | R6 | ✅ **ANSWERED** — four non-AOSP exports, not one: `repaintEverything()`, `setLayerRefreshMode(String8 const&, uint)`, `Transaction::setRefreshMode(sp<SurfaceControl> const&, int)`, **and a new AIDL binder method** `ISurfaceComposer::remoteSetLayerRefreshMode`. Java side is `xrz.framework.manager.XrzEinkManager` via `libXrzFramework_runtime.so` | |
 
 Mono-model `EinkRefreshMode` codes, **as a starting hypothesis only** (decompiled from the
@@ -355,8 +376,23 @@ Frontlight path ✅ **confirmed on this unit**:
 `/sys/devices/platform/11d01000.i2c7/i2c-7/7-0036` → `lm3630a_cold_light`,
 `lm3630a_warm_light`, `lm3630a_version`.
 
-`ro.vendor.xrz.default_refresh_mode` is **178**, which is `NORMAL` in the table
-above — weak but real support for the mono mode numbering carrying over.
+**The mono mode numbering does carry over.** Two independent confirmations:
+`ro.vendor.xrz.default_refresh_mode` is **178** = `NORMAL`, and on a live idle
+device `/sys/kernel/debug/eink_debug/frame_data` reports **`frame_mode=0x4`** =
+`GC16`. Treat the table as real for the modes it lists — but still incomplete,
+since it has nothing for saturation/dither (see R5).
+
+### Hardware topology (from the kernel log, rooted)
+
+MT6877 on kernel **4.19.191** → **ICN6211** MIPI-to-RGB bridge → **SC1452-FAB**
+EPD controller → `EC061KH1C1` panel, with a **TPS65185** ("papyrus") EPD PMIC.
+VCOM −2250 mV.
+
+**`drm_eink_update_ioctl` is the refresh entry point** — one per update, 2–15 ms.
+It is a **DRM ioctl**, so it is reachable from userspace *independently of
+SurfaceFlinger*. Bigme's `libgui.so` additions vanish on a GSI; this does not.
+Strong candidate for objective 4 — investigate before assuming a GSI needs the
+whole vendor framework.
 
 ### 7.3 GSI selection
 
@@ -457,10 +493,22 @@ boot, and setup wizard has been reported to hang on Lineage/GAPPs builds.
 | --- | --- |
 | Won't boot after flash | Unplug, hold power 10 s, press power again within 5 s. Repeat several times. |
 | Wedged / unresponsive | Hold power 10–15 s to force off, then BROM |
-| Restore one partition | `python mtk.py w <name> work/backup/out/<name>.bin` |
-| Black screen after bad super | Write the original `super.bin` back |
+| Restore one partition | `bin/mtk w <name> work/backup/out/<name>.bin` ✅ *proven at §5.4* |
+| Bad `boot` / root gone wrong | `bin/mtk w boot_a work/backup/out/boot_a.bin` |
+| Black screen after bad super | Write the original `super.bin` back — ours is in `work/backup/out/` |
 | Back to stock | Write everything back **except userdata**; `seccfg` last or never |
 | Factory reset from BROM | MTKMETAUtility → Factory Reset Meta |
+
+⚠️ **mtkclient will hang forever in BROM mode unless you pass `--preloader`.**
+Its DRAM-config search is eMMC-only and this is a UFS device. Always:
+
+```
+bin/mtk <cmd> --preloader work/backup/out/preloader_boot1.bin
+```
+
+Without that file you are down to preloader mode only (start `bin/mtk` polling,
+*then* `adb reboot`), which needs a device that still boots. That is why the
+preloader dump is `CRITICAL-UNIQUE`. Full detail in `TOOLCHAIN.md`.
 
 **OTAs will not apply** once `boot`, `vbmeta`, or `super` are modified — the updater
 hash-checks them. Restore all three first. Stock recovery is reportedly non-functional for
