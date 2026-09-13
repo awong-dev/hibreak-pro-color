@@ -48,15 +48,11 @@ Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
 - R6 Bigme `libgui.so` diff — not started
 
 ## Next
-1. **BLOCKER on §6.1 — personal data on the phone.** Never confirmed as saved.
-   Unlock factory-resets and §7.4 runs `fastboot -w`; `userdata` is not in the
-   backup and §2.2 forbids restoring it. Confirm with the human *before*
-   proposing the unlock, not after.
-2. §5.4 prove the write path (RED — human runs). Re-write a partition with its
+1. §5.4 prove the write path (RED — human runs). Re-write a partition with its
    own backup copy:
    `bin/mtk w vbmeta_a work/backup/out/vbmeta_a.bin`
    Mind the post-flash boot quirk (§3). This is the last step of phase 1.
-3. Then §6.1 unlock (RED). Note `md_udc` does **not** exist on this device, so
+2. Then §6.1 unlock (RED). Note `md_udc` does **not** exist on this device, so
    §6.1's `mtk e metadata,userdata,md_udc` needs that name dropped.
 
 ## Gate
@@ -115,6 +111,8 @@ Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
 
 ## Not backed up, and not backupable
 - `userdata` (~241 GB) — skipped by design; will be **wiped** at unlock.
+  [2026-09-12] Human confirms there is no personal data on the device — it is
+  new. The wipe costs nothing, and this is no longer a blocker on §6.1.
 - **RPMB** — mtkclient's UFS read fails; authenticated and non-restorable anyway.
 - **SoC efuses** — secure-boot config burned into silicon. SBC/SLA/DAA are all
   currently *disabled*, and that is the safety net the entire recovery story
