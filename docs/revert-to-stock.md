@@ -106,10 +106,35 @@ depends on the preloader still being intact.
 - [ ] Step 2 completed — stock `boot_a.bin`, no Magisk
 - [ ] Step 3 completed — vbmeta flashed **without** disable flags
 - [ ] Step 4 completed — userdata wiped
-- [ ] The device **boots normally** and `getprop ro.boot.verifiedbootstate` reports **`green`**
+- [ ] The device **boots normally**
+- [ ] Partitions **verified by readback** against the backup — see below
 
-That last one is the real gate. `orange` means something still fails
-verification, and relocking then is the brick.
+⚠️ **Do not use `ro.boot.verifiedbootstate` as the gate.** AVB states are:
+
+| state | meaning |
+| --- | --- |
+| `green` | bootloader **locked**, verification passed |
+| `yellow` | locked, verified with a user key |
+| **`orange`** | **bootloader unlocked** — verification not enforced, *by definition* |
+| `red` | locked, verification **failed** |
+
+While unlocked you will *always* see `orange`, however perfectly stock the
+device is. `green` only appears **after** locking. An earlier version of this
+document told you to wait for `green` before relocking; that is unreachable and
+was wrong.
+
+### The actual check: read the partitions back
+
+```
+bin/mtk r vbmeta_a,boot_a /tmp/vb.bin,/tmp/bt.bin --preloader work/backup/out/preloader_boot1.bin
+shasum -a 256 /tmp/vb.bin /tmp/bt.bin
+grep -E "vbmeta_a\.bin|boot_a\.bin" work/backup/SHA256SUMS
+```
+
+Matching digests prove the vbmeta disable flags are gone and Magisk is off the
+boot image — which is what `green` would have told you, obtainable before you
+commit to locking rather than after. `super` can be checked the same way but
+takes ~17 minutes to read.
 
 ```
 fastboot flashing lock
