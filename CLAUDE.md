@@ -306,7 +306,13 @@ Pro. For the Color:
 - Bigme ships a modified `libgui.so` exposing a `repaintEverything` method that mainline
   AOSP SurfaceFlinger lacks — which is why refresh transactions that work on stock
   (1004/1005) don't exist on a GSI, and why a freshly-flashed GSI looks like a dead
-  screen.
+  screen. ✅ **Confirmed on this device, and it is worse than that**: there are
+  *four* non-AOSP exports including a new `ISurfaceComposer` AIDL binder method,
+  and the Java-facing `XrzEinkManager` lives in the framework. A GSI replaces
+  `libgui.so`, SurfaceFlinger *and* the framework, so all of it goes at once.
+  See `work/research/eink-stack.md`.
+- ⚠️ `/system/eink_key` is a second `.awf` — **for a 10.3" panel** (`EC103KH2C1`),
+  not this 6.1" one (`EC061KH1C1`). Do not treat it as this device's waveform.
 
 **Expected first result: it boots, greyscale only, limited refresh control.** That is
 success for objective 4. Colour is objective 5.
@@ -318,11 +324,11 @@ Work these on **stock, before flashing anything**, because stock is where the an
 | # | Question | How to attack |
 | --- | --- | --- |
 | R1 | What is the waveform partition called and what format is the blob? | `printgpt`; `file`/`binwalk`/`strings` the dump; compare against known E Ink `.wbf` structure |
-| R2 | Where does the runtime expect the waveform file? | `strings` vendor partition; `ro.vendor.xrz.*` props; `lsof`-equivalent on the stock EInk service |
+| R2 | ✅ **ANSWERED** — `/dev/block/by-name/waveform` → `/data/waveform.bin` (+`.bak`) → `/sys/kernel/debug/eink_debug/waveform`, `machine_waveform`. `/system/bin/xrz_updater --update-waveform` is the writer. See `work/research/eink-stack.md` | |
 | R3 | What does `/sys/kernel/debug/eink_debug` actually expose on *this* unit? | Enumerate on rooted stock — **do not assume the mono table below is complete** |
 | R4 | Which sysfs writes correspond to which EInk Center setting? | Poll/diff sysfs while toggling each mode in the stock UI |
 | R5 | Which modes are CFA/colour-specific? | Whatever appears in R4 but not in the mono `EinkRefreshMode` table |
-| R6 | What exactly does Bigme's `libgui.so` add? | Diff against AOSP 14 `libgui.so`; disassemble `repaintEverything` |
+| R6 | ✅ **ANSWERED** — four non-AOSP exports, not one: `repaintEverything()`, `setLayerRefreshMode(String8 const&, uint)`, `Transaction::setRefreshMode(sp<SurfaceControl> const&, int)`, **and a new AIDL binder method** `ISurfaceComposer::remoteSetLayerRefreshMode`. Java side is `xrz.framework.manager.XrzEinkManager` via `libXrzFramework_runtime.so` | |
 
 Mono-model `EinkRefreshMode` codes, **as a starting hypothesis only** (decompiled from the
 mono Pro, incomplete for CFA):

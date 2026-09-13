@@ -39,14 +39,36 @@ Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
   (`0x58881688`) wrapping a 6,482,960-byte E Ink `.awf`, plus a MediaTek
   signature block. Panel id `EC061KH1C1`, controller `SC1452-FAB`. Extracted to
   `work/research/waveform.awf`. See `work/backup/MANIFEST.md`.
-- R2 runtime waveform path — not started
-- R3 `eink_debug` enumeration — **blocked on root**. `adb root` refused
-  (production build); `/sys/devices/platform/eink` exists but exposes only bare
-  platform-device attributes to uid 2000
+- R2 runtime waveform path — **ANSWERED**. `/dev/block/by-name/waveform` →
+  `/data/waveform.bin` (+`.bak`) → `/sys/kernel/debug/eink_debug/waveform` and
+  `machine_waveform`. `/system/bin/xrz_updater --update-waveform` is the writer
+  (and a ready-made tool for writing one back)
+- R3 `eink_debug` enumeration — **partial**. Five nodes recovered from strings:
+  `anti_alias`, `anti_flicker`, `clean_a2`, `waveform`, `machine_waveform`.
+  Full enumeration still **blocked on root** (`adb root` refused on this
+  production build)
 - R4 sysfs ↔ EInk Center mapping — blocked on root. EInk Center is most likely
   `com.xrz.sys.control`
 - R5 CFA-specific modes — not started
-- R6 Bigme `libgui.so` diff — not started
+- R6 Bigme `libgui.so` diff — **ANSWERED**. Four non-AOSP exports:
+  `repaintEverything()`, `setLayerRefreshMode(String8 const&,uint)`,
+  `Transaction::setRefreshMode(sp<SurfaceControl> const&,int)`, and a new AIDL
+  binder method `ISurfaceComposer::remoteSetLayerRefreshMode`. Java side is
+  `xrz.framework.manager.XrzEinkManager`
+
+## Done (cont. 3)
+- [2026-09-12] `super.bin` unpacked with `lpunpack` (10 s) → `work/super/`.
+  Inspected read-only with `debugfs` — no mount, no container, no root needed.
+- [2026-09-12] **§6.2 debloat review complete** → `work/research/debloat-review.md`.
+  Verdict: the removal list is safe for the e-ink stack (all six display-related
+  xrz packages survive, as do libgui/libXrzFramework/xrz_updater/eink_key), but
+  the scripts have three defects and **must not be run as-is**:
+  - 🔴 `repack.sh` omits `lpmake --virtual-ab`, so the repacked super loses the
+    `virtual_ab_device` header flag this device declares. Plausible brick.
+  - 🔴 `repack.sh` silently drops `system_b`, which holds ~57 MB of real extents.
+  - ⚠️ `hosts.txt` is absent from the repo, so the telemetry half no-ops while
+    appearing to succeed (no `set -e`).
+- [2026-09-12] E-ink stack mapped → `work/research/eink-stack.md` (R2, R6, part of R3).
 
 ## Next
 1. §6.1 unlock (RED — human runs). Device is sitting in fastboot now.
@@ -54,9 +76,14 @@ Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
    `mtk e metadata,userdata,md_udc` must drop that name or the erase fails.
 2. After unlock the wipe clears Developer Options — re-enable USB debugging
    and MTP before anything expects adb.
-3. Then §6.2 debloat. Build it against the `super.bin` we already have: it came
-   off this exact firmware, which is precisely what the §6.2 trap demands. No
-   re-dump needed.
+3. §6.2 debloat — **do not run the scripts unmodified**. Apply the fixes in
+   `work/research/debloat-review.md` first (`--virtual-ab` above all).
+4. Unresolved before flashing a debloated super: EInk Center
+   (`com.xrz.sys.control`) lives in `/data/app`, not `/system`, and its install
+   source could not be pinned down. The init service points at
+   `/system/preinstall`, which does not exist in this image.
+5. Root (Magisk) is now the gating item for R3/R4/R5 — the colour research
+   cannot proceed without it.
 
 ## Phase 2 started
 - [2026-09-12] `fastboot flashing unlock` — **succeeded**. Returned OKAY with
