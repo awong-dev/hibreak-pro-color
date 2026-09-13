@@ -2,7 +2,7 @@
 Phase: **2** (debloated stock super)
 Backup verified: **y** — restore path **proven** by §5.4
 Bootloader: **UNLOCKED** — `unlocked: yes`, `secure: no`, warranty bit tripped
-Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`, rooted: **no**
+Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`, **rooted (Magisk 30.7)**
 
 Everything below happened 2026-09-12, one session.
 
@@ -89,6 +89,24 @@ Everything below happened 2026-09-12, one session.
   vbmeta flash is refused.
 - Note `md_udc` **does not exist on this device**; §6.1's erase list names it.
 
+### Root — Magisk 30.7
+- Patched **`boot`**, not `init_boot`. `init_boot_a` is all-zero and the 11.5 MB
+  ramdisk lives in `boot_a` (header **v2**, page 2048, non-GKI) — the opposite
+  of standard Android 14 guidance. Checking the header first avoided a wasted
+  flash.
+- Magisk patched `boot.img` on-device; verified before flashing by decompressing
+  both ramdisks: 463 → 472 cpio entries, adding `.backup/.magisk` and
+  `overlay.d/sbin/magisk.xz`, kernel byte-identical.
+- `fastboot flash boot` → booted first time, no boot quirk needed.
+  `verifiedbootstate=orange`, `magisk -v` = `30.7:MAGISK:R`.
+- **vbmeta was NOT touched.** `secure: no` on an unlocked bootloader was enough;
+  the `--disable-verity --disable-verification` step many MTK guides insist on
+  proved unnecessary here.
+- Root over ADB was rejected three times (`W Magisk : su: request rejected
+  (2000)`). Not a broken install — a Magisk permission setting. Fixed from the
+  Magisk UI; `scrcpy` was what made that UI usable, since the e-ink panel
+  redraws too poorly to trust toggle state.
+
 ### §6.2 review (no flashing yet)
 - `super.bin` unpacked with `lpunpack` in ~10 s → `work/super/`. Inspected with
   `debugfs` — no mount, no container, no root.
@@ -108,12 +126,19 @@ Everything below happened 2026-09-12, one session.
 - R2 runtime waveform path — **ANSWERED**. `/dev/block/by-name/waveform` →
   `/data/waveform.bin` (+`.bak`) → `/sys/kernel/debug/eink_debug/waveform` and
   `machine_waveform`. `/system/bin/xrz_updater --update-waveform` is the writer.
-- R3 `eink_debug` enumeration — **partial**. Five nodes from strings:
-  `anti_alias`, `anti_flicker`, `clean_a2`, `waveform`, `machine_waveform`.
-  Full enumeration **blocked on root**.
-- R4 sysfs ↔ EInk Center mapping — **blocked on root**. EInk Center is
-  `com.xrz.sys.control`.
-- R5 CFA-specific modes — not started. Blocked behind R3/R4.
+- R3 `eink_debug` enumeration — **ANSWERED**. **23 nodes**, not the 5 inferred
+  from strings. Full table with values in `work/research/eink-stack.md`; raw
+  captures in `eink_debug-{ls,values}.txt`. Driver is `v4.92_20251104`,
+  VCOM −2250 mV, temperature 29 °C, `frame_mode=0x4` (= `GC16` in the mono
+  table, so the numbering carries over).
+- R4 sysfs ↔ EInk Center mapping — **now unblocked** (root). Not yet done.
+  Note `saturation` and `contrast` are **read-only** in `eink_debug` even though
+  `ro.vendor.xrz.default_color_enhance`/`default_contrast_level` exist, so the
+  UI sets them by some other path — that is the thing to find.
+- R5 CFA-specific modes — **first real leads**. `saturation`, `global_dither`
+  and `contrast` exist in `eink_debug` and appear nowhere in the mono
+  `EinkRefreshMode` table; `saturation` is meaningless on a mono panel. These
+  are the candidates.
 - R6 Bigme `libgui.so` — **ANSWERED**, and larger than §7.1 described. Four
   non-AOSP exports: `repaintEverything()`,
   `setLayerRefreshMode(String8 const&, uint)`,
@@ -136,10 +161,16 @@ Everything below happened 2026-09-12, one session.
 ---
 
 ## Next
-1. Decide root (Magisk). It gates R3/R4/R5 — the entire colour research — and
-   would also let us resolve the EInk Center question above.
-2. §6.2 debloat, only after applying the fixes in `debloat-review.md`.
-3. §7 GSI. Remember vendor is Android **12**, and `max-download-size` is 128 MiB.
+1. **R4/R5** — poll `eink_debug` while toggling each EInk Center setting, and
+   find how `saturation`/`contrast` are actually written given they are
+   read-only in debugfs. This is the colour research proper. **Writes to
+   `/sys/...` are RED** (§2.1) — read-and-diff only unless the human says go.
+2. Investigate **`drm_eink_update_ioctl`** as a GSI-independent refresh path.
+   It is a DRM ioctl, so it survives losing Bigme's `libgui.so` — potentially
+   the answer to objective 4.
+3. Resolve the EInk Center install source, now possible with root.
+4. §6.2 debloat, only after applying the fixes in `debloat-review.md`.
+5. §7 GSI. Vendor is Android **12**; `max-download-size` is 128 MiB.
 
 ---
 
@@ -170,8 +201,16 @@ Everything below happened 2026-09-12, one session.
 - `_b` partitions dumping as all-zero is **normal** here. Slot B has never been
   written; fastboot's `slot-successful:b: no` confirms it independently.
 - `/system/eink_key` is a second `.awf` but for a **10.3" panel**
-  (`EC103KH2C1`), not this 6.1" one. Do not mistake it for this device's
-  waveform.
+  (`EC103KH2C1`), not this 6.1" one. Confirmed **not in use**: the driver's
+  `machine_waveform` reports the 6.1" string from our `waveform` partition.
+- `/data/waveform.bin` and `/data/waveform.bak` appear in `system_a` strings but
+  **do not exist** on a running device. The live waveform source is the
+  partition, not a `/data` cache — do not build on those paths.
+- Magisk denying ADB (`su: request rejected (2000)`) is a settings toggle, not a
+  broken root. Use `scrcpy` to drive the Magisk UI — the e-ink panel does not
+  redraw toggles reliably enough to tell whether a setting took.
+- CLAUDE.md §3 calls the frontlight "36-level"; the raw sysfs `lm3630a_cold_light`
+  reads **182**, so the underlying range is wider. Do not assume 0–36.
 
 ---
 
