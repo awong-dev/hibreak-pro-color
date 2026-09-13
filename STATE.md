@@ -1,5 +1,5 @@
 ## Status
-Phase: 1   Backup verified: **n — awaiting two off-machine copies (§5.2 gate)**
+Phase: 1 complete → 2   Backup verified: **y** (2026-09-12)
 Bootloader: locked (OEM unlock toggle ON)
 Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
 
@@ -48,14 +48,25 @@ Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
 - R6 Bigme `libgui.so` diff — not started
 
 ## Next
-1. **Human: save anything personal off the phone.** Unlocking factory-resets and
-   §7.4 opens with `fastboot -w`. `userdata` is deliberately not in the backup
-   and §2.2 forbids restoring it — so photos, notes, sideloaded books and app
-   data are gone at that point unless saved separately now.
-2. **Human: make two off-machine copies of `work/backup/` (13 GB).** The §5.2
-   gate. No RED command may be proposed before `VERIFIED` exists.
-3. Agent: `chmod -R a-w work/backup` + `touch work/backup/VERIFIED`.
-4. §5.4 prove the write path (RED, human runs).
+1. **BLOCKER on §6.1 — personal data on the phone.** Never confirmed as saved.
+   Unlock factory-resets and §7.4 runs `fastboot -w`; `userdata` is not in the
+   backup and §2.2 forbids restoring it. Confirm with the human *before*
+   proposing the unlock, not after.
+2. §5.4 prove the write path (RED — human runs). Re-write a partition with its
+   own backup copy:
+   `bin/mtk w vbmeta_a work/backup/out/vbmeta_a.bin`
+   Mind the post-flash boot quirk (§3). This is the last step of phase 1.
+3. Then §6.1 unlock (RED). Note `md_udc` does **not** exist on this device, so
+   §6.1's `mtk e metadata,userdata,md_udc` needs that name dropped.
+
+## Gate
+- [2026-09-12] `work/backup/VERIFIED` written, `work/backup` chmod a-w
+  (test write confirmed denied). **Deviation: ONE off-machine copy, not the two
+  §5.2 requires** — accepted deliberately by the human after the trade-off was
+  put to them. Recorded so nobody later assumes the stricter rule was met.
+  Note §5.2's command order is wrong: `chmod -R a-w` must come *after*
+  `touch VERIFIED`, or the touch fails on a read-only directory. Fixed in
+  CLAUDE.md.
 
 ## Done (cont. 2)
 - [2026-09-12] **Full backup complete.** 61/61 non-userdata partitions plus

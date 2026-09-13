@@ -204,8 +204,8 @@ Then require the human to confirm **two off-machine copies exist** before writin
 everyone says.
 
 ```bash
-chmod -R a-w work/backup
-touch work/backup/VERIFIED
+touch work/backup/VERIFIED     # create the gate FIRST --
+chmod -R a-w work/backup       # a-w makes the directory itself unwritable
 ```
 
 ### 5.3 Build the manifest (GREEN, high value)
