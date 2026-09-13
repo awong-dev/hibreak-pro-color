@@ -131,14 +131,20 @@ Everything below happened 2026-09-12, one session.
   captures in `eink_debug-{ls,values}.txt`. Driver is `v4.92_20251104`,
   VCOM −2250 mV, temperature 29 °C, `frame_mode=0x4` (= `GC16` in the mono
   table, so the numbering carries over).
-- R4 sysfs ↔ EInk Center mapping — **now unblocked** (root). Not yet done.
-  Note `saturation` and `contrast` are **read-only** in `eink_debug` even though
-  `ro.vendor.xrz.default_color_enhance`/`default_contrast_level` exist, so the
-  UI sets them by some other path — that is the thing to find.
-- R5 CFA-specific modes — **first real leads**. `saturation`, `global_dither`
-  and `contrast` exist in `eink_debug` and appear nowhere in the mono
-  `EinkRefreshMode` table; `saturation` is meaningless on a mono panel. These
-  are the candidates.
+- R4 EInk Center mapping — **mostly answered, by a better route than
+  sysfs-diffing.** Settings are **per-app**, in a SQLite DB
+  (`com.xrz.eink.display.policy`) seeded from `/system/etc/display_policy`
+  (101 KB JSON, 228 package policies). Full schema + observed value ranges in
+  `eink-stack.md`. ⚠️ Still open: `saturation`/`contrast` are read-only in
+  debugfs, so their write path is elsewhere — likely an ioctl on
+  `/dev/dri/card0`, or the SurfaceFlinger route.
+- R5 CFA-specific modes — **ANSWERED**. Colour is a **separate enum** from
+  `EinkRefreshMode`: `COLOR_MODE_DEFAULT/COMIC/MAGAZINE/VIDEO/CUSTOM`, applied
+  **per package**. Values decoded from the shipped policy: **`3` = VIDEO**
+  (all 11 users are video apps — iQiyi, Youku, Douyin, Kuaishou, Tencent Video…),
+  `4` = CUSTOM (dialer), `0` = DEFAULT. ⚠️ `1` vs `2` (COMIC/MAGAZINE) rests on
+  declaration order only — confirm by setting a comic app in EInk Center and
+  reading the DB back.
 - R6 Bigme `libgui.so` — **ANSWERED**, and larger than §7.1 described. Four
   non-AOSP exports: `repaintEverything()`,
   `setLayerRefreshMode(String8 const&, uint)`,
@@ -161,16 +167,17 @@ Everything below happened 2026-09-12, one session.
 ---
 
 ## Next
-1. **R4/R5** — poll `eink_debug` while toggling each EInk Center setting, and
-   find how `saturation`/`contrast` are actually written given they are
-   read-only in debugfs. This is the colour research proper. **Writes to
-   `/sys/...` are RED** (§2.1) — read-and-diff only unless the human says go.
-2. Investigate **`drm_eink_update_ioctl`** as a GSI-independent refresh path.
-   It is a DRM ioctl, so it survives losing Bigme's `libgui.so` — potentially
-   the answer to objective 4.
-3. Resolve the EInk Center install source, now possible with root.
-4. §6.2 debloat, only after applying the fixes in `debloat-review.md`.
-5. §7 GSI. Vendor is Android **12**; `max-download-size` is 128 MiB.
+1. Confirm `COLOR_MODE_COMIC` vs `MAGAZINE` (1 vs 2) — set a comic app's colour
+   mode in EInk Center, then read `com.xrz.eink.display.policy` back. Needs the
+   human to toggle; the readback is GREEN.
+2. Find the `saturation`/`contrast` **write path**. Next place to look is the
+   ioctl table on `/dev/dri/card0` alongside `drm_eink_update_ioctl`.
+3. Investigate **`drm_eink_update_ioctl`** as a GSI-independent refresh path —
+   a DRM ioctl survives losing Bigme's `libgui.so`, so it may be the answer to
+   objective 4. This is the highest-value open thread.
+4. Resolve the EInk Center install source, now possible with root.
+5. §6.2 debloat, only after applying the fixes in `debloat-review.md`.
+6. §7 GSI. Vendor is Android **12**; `max-download-size` is 128 MiB.
 
 ---
 

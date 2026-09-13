@@ -361,16 +361,28 @@ root; R5 has leads.** Detail in `work/research/eink-stack.md`.
 | R1 | ✅ **ANSWERED** — partition is literally `waveform`, 16 MiB at `0x4cd00000`, **no A/B counterpart**. A MediaTek image header (`0x58881688`, name `waveform`) wrapping a 6,482,960-byte E Ink `.awf` at offset `0x200`, plus a trailing MediaTek signature block. Panel `EC061KH1C1`, controller `SC1452-FAB`. Extracted → `work/research/waveform.awf` | |
 | R2 | ✅ **ANSWERED, confirmed on-device** — the `waveform` **partition** is the live source. `machine_waveform` reports byte-for-byte the string embedded in our dump. `/system/bin/xrz_updater --update-waveform` is the writer. ⚠️ `/data/waveform.bin`/`.bak` appear in `system_a` strings but **do not exist** on a running device — not part of the live path | |
 | R3 | ✅ **ANSWERED** — enumerated on rooted stock: **23 nodes**, not the 5 strings suggested. Driver `v4.92_20251104`, VCOM `-2250` mV, temp `29`, `frame_mode=0x4`. Writable: `anti_alias`, `anti_flicker`, `clean_a2`, `enable`, `print_level`, `save_level`. Full table + values in `work/research/eink-stack.md` | |
-| R4 | **Unblocked (rooted), not yet done.** Poll/diff `eink_debug` while toggling each EInk Center setting. ⚠️ Puzzle to solve first: `saturation` and `contrast` are **read-only** in debugfs, yet `ro.vendor.xrz.default_color_enhance` / `default_contrast_level` exist — so the UI writes them by some other path. Find it. **Writes to `/sys/…` are RED (§2.1)** |
-| R5 | **First real leads.** `saturation`, `global_dither` and `contrast` exist in `eink_debug` and appear nowhere in the mono table; `saturation` is meaningless on a mono panel. `dither_process` runs kernel-side per update. These are the candidates |
+| R4 | **Mostly answered by a better route than sysfs-diffing.** Settings are **per-app**, kept in a SQLite DB (`com.xrz.eink.display.policy`) seeded from `/system/etc/display_policy` (101 KB **JSON**). Schema and observed value ranges in `eink-stack.md`. ⚠️ Still open: `saturation`/`contrast` are **read-only** in debugfs, so the write path is elsewhere — likely an ioctl on `/dev/dri/card0` or the SurfaceFlinger route, *not* sysfs. **Writes to `/sys/…` are RED (§2.1)** |
+| R5 | ✅ **ANSWERED** — the CFA modes are a **separate enum** from `EinkRefreshMode`: `COLOR_MODE_DEFAULT/COMIC/MAGAZINE/VIDEO/CUSTOM`, in `xrz.framework.server.jar`. Values decoded from `/system/etc/display_policy`: **`3` = VIDEO** (all 11 users are video apps), `4` = CUSTOM, `0` = DEFAULT. ⚠️ `1` vs `2` (COMIC/MAGAZINE) rests on declaration order — unconfirmed. Colour is set **per-app**, not globally |
 | R6 | ✅ **ANSWERED** — four non-AOSP exports, not one: `repaintEverything()`, `setLayerRefreshMode(String8 const&, uint)`, `Transaction::setRefreshMode(sp<SurfaceControl> const&, int)`, **and a new AIDL binder method** `ISurfaceComposer::remoteSetLayerRefreshMode`. Java side is `xrz.framework.manager.XrzEinkManager` via `libXrzFramework_runtime.so` | |
 
-Mono-model `EinkRefreshMode` codes, **as a starting hypothesis only** (decompiled from the
-mono Pro, incomplete for CFA):
+Mono-model `EinkRefreshMode` codes. ✅ **Confirmed to apply to this device** —
+`frame_data` reports `frame_mode=0x4` (`GC16`), `default_refresh_mode` is 178
+(`NORMAL`), and the shipped per-app policy uses only `178`/`179`
+(`NORMAL`/`FAST`). Still **incomplete for CFA** — colour is a *separate* enum,
+see R5:
 
 `INIT 1 · DU 2 · GC16 4 · GC4 8 · A2 16 · GL16 32 · GLR16 64 · GLD16 128 · GU16 132 ·
 GU4 136 · INPUT 137 · CLEAN 176 · HD 177 · NORMAL 178 · FAST 179 · HANDWRITE 1029 ·
 AUTO 32768`
+
+**CFA colour modes — a different enum entirely** (`xrz.framework.server.jar`),
+applied **per package**:
+
+`COLOR_MODE_DEFAULT 0 · COLOR_MODE_COMIC 1? · COLOR_MODE_MAGAZINE 2? ·
+COLOR_MODE_VIDEO 3 ✅ · COLOR_MODE_CUSTOM 4`
+
+`3 = VIDEO` is solid — every one of its 11 users in `/system/etc/display_policy`
+is a video app. `1`/`2` are assumed from declaration order and need confirming.
 
 Frontlight path ✅ **confirmed on this unit**:
 `/sys/devices/platform/11d01000.i2c7/i2c-7/7-0036` → `lm3630a_cold_light`,
