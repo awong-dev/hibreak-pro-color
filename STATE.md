@@ -249,6 +249,13 @@ claim in this file that VNDK absence *blocks* a GSI was wrong.
 ---
 
 ## Next
+-1. **The tiling is a 4:1 PIXEL PACKING mismatch** — see
+   `docs/gsi-display-analysis.md`. An independent report of the identical
+   artefact on the **mono** HiBreak Pro (xda post 90611816, unanswered) kills
+   the CFA hypothesis: a mono panel has no colour filter array. `eink_ldl=412 =
+   1648/4` — the EPD takes four pixels per clock and is being fed one byte per
+   pixel. Next: read stock's DRM framebuffer *pitch* during a live commit, which
+   needs root on stock (re-flash `work/root/magisk_patched-30700_TKoNu.img`).
 0. **Reference measurement DONE** → `work/research/stock-ref/`. Result below.
    Reflash the GSI and run `bin/apply-xrz-props`.
 1. **Try TrebleDroid A15** (`work/gsi/td15-system.img`, downloaded). One release
