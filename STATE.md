@@ -133,7 +133,30 @@ Everything below happened 2026-09-12, one session.
 - ✅ **`xSettings` is NOT in the debloat removal list.** The last blocking
   unknown for objective 3 is cleared.
 
-### §6.2 review (no flashing yet)
+### §6.2 debloat — FLASHED
+- Ran `tools/debloat/0[2-5]` and flashed `super.new.bin`. Images shrank:
+  product 2.62→1.34 GB, system 2.43→2.15 GB, system_ext 738→683 MB,
+  vendor 681→669 MB. `lpdump` of the flashed image is structurally sound.
+- **Saved for revert**: `work/releases/super-debloat-v1.bin`, sha256
+  `f87cb9fb…`, verified byte-identical to what was flashed.
+  ⚠️ The first copy attempt was corrupt — correct apparent size, only 2.39 GB
+  allocated vs 4.92 GB. Passed a size check, failed the checksum. **Verify
+  large copies by checksum, never by `ls`.**
+
+### GSI images staged (not yet flashed)
+| image | notes |
+| --- | --- |
+| `td16-system.img` | TrebleDroid **A16** arm64 vanilla, 2.21 GB. phh patches + TrebleApp. **Chosen.** |
+| `a17-system.img` | Google official **A17** (CP41.260814.003.B1), 2.09 GB. No phh patches. |
+| `td15-system.img` | TrebleDroid A15 arm64-ab, fallback. |
+
+**VNDK is a non-issue between them**: A15, A16 and A17 *all* lack `vndk-31`,
+which our vendor declares (`ro.vndk.version=31`, and vendor ships none itself).
+Only A17 lacks VNDK entirely (28/29 in the TrebleDroid builds). Whether the
+missing snapshot matters is untested — the linker may fall back. An earlier
+claim in this file that VNDK absence *blocks* a GSI was wrong.
+
+### §6.2 review (before flashing)
 - `super.bin` unpacked with `lpunpack` in ~10 s → `work/super/`. Inspected with
   `debugfs` — no mount, no container, no root.
 - **Review complete → `work/research/debloat-review.md`.** The removal list is
@@ -191,9 +214,9 @@ Everything below happened 2026-09-12, one session.
 ---
 
 ## Next
-1. **§6.2 debloat** — now unblocked. Apply the three fixes in
-   `debloat-review.md` (`--virtual-ab` above all), then unpack/mount/debloat/
-   repack in `bin/hibreak-shell`, then RED-flash `mtk w super`.
+1. **§7 GSI** — TrebleDroid Android 16 (`td16-system.img`) staged in `work/gsi/`.
+   Flash in fastbootd, then `fastboot -w`. Revert is
+   `bin/mtk w super work/releases/super-debloat-v1.bin`.
 2. `COLOR_MODE_MAGAZINE = 1` is the last untested cell — same method: set
    Magazine on any app, diff `/data/system/disp_policy.db`.
 3. Reverse the **ioctl numbers** for the six `drm_eink_*_ioctl` entries and the
