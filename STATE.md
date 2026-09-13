@@ -1,5 +1,7 @@
 ## Status
-Phase: **2** (debloated stock super)
+Phase: **3** (GSI) — **a GSI boots.** Android 16 on the Android 12 vendor,
+`boot_completed=1`, root via phh su. Blocker is the **Mali GPU driver**, not
+e-ink. See `work/research/gsi-attempt-1.md`.
 Backup verified: **y** — restore path **proven** by §5.4
 Bootloader: **UNLOCKED** — `unlocked: yes`, `secure: no`, warranty bit tripped
 Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`, **rooted (Magisk 30.7)**
@@ -221,9 +223,14 @@ claim in this file that VNDK absence *blocks* a GSI was wrong.
 ---
 
 ## Next
-1. **§7 GSI** — TrebleDroid Android 16 (`td16-system.img`) staged in `work/gsi/`.
-   Flash in fastbootd, then `fastboot -w`. Revert is
-   `bin/mtk w super work/releases/super-debloat-v1.bin`.
+1. **Try TrebleDroid A15** (`work/gsi/td15-system.img`, downloaded). One release
+   closer to the A12 vendor; its Skia may tolerate this Mali blob. Cheapest
+   meaningful test of the GPU problem.
+2. Force **HWC-only composition** so SurfaceFlinger never calls RenderEngine.
+   ⚠️ NOT `service call SurfaceFlinger 1008 i32 1` — that *forces* GPU
+   composition, the path that hangs. §7.5's advice is from the mono device and
+   is backwards here.
+3. Drive **`drm_eink_update_ioctl`** directly, bypassing SurfaceFlinger.
 2. *(objective 6, later)* LineageOS 23 GSI with phh patches — plan written up in
    `docs/lineage-23-gsi-build.md`. **Not buildable on this Mac**: needs ~500 GB
    and a Linux host, so it is a cloud-VM job (~$10–20 on GCP). And it is a
@@ -239,6 +246,21 @@ claim in this file that VNDK absence *blocks* a GSI was wrong.
 ---
 
 ## Traps hit
+- **A GSI on this device does not fail on e-ink — it fails on the GPU.** The
+  e-ink driver, the LK-loaded waveform and the DRM ioctls all work fine under
+  Android 16. SurfaceFlinger wedges inside `/vendor/lib64/egl/libGLES_mali.so`
+  (`osup_sync_object_wait`) during `flushGL()`, and switching to Vulkan makes it
+  abort in `SkiaGpuContext::MakeVulkan_Ganesh` instead. Both GPU paths broken.
+- **`bootanim=running` with `boot_completed=1` means the display never
+  progressed**, not that boot failed. On e-ink a looping boot animation is easy
+  to mistake for a reboot loop — check `/proc/uptime`: if it climbs
+  monotonically there are no reboots.
+- **USB product name identifies the running system.** `TrebleDroid vanilla` vs
+  `HiBreak` vs `Android` in `ioreg` is more reliable than guessing from the USB
+  PID, which I misread as fastboot.
+- **"Can't load Android system" after flashing a GSI is a `/data` encryption
+  mismatch**, not a GSI failure. `fastboot -w` alone did not clear it; the
+  on-screen factory reset did. Erase `metadata` as well as `userdata`.
 - **A debloated super will not boot until dm-verity is disabled.** `system`,
   `vendor`, `product`, `system_ext` carry hashtree descriptors; changing their
   contents invalidates the root hashes and the kernel refuses to mount them.
