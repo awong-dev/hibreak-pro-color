@@ -34,10 +34,16 @@ polling, then `adb reboot` in another terminal (see TOOLCHAIN.md).
 
 ## 2. Stock boot — this is the unroot
 
+⚠️ **Step 1 leaves the device in DA/preloader mode**, so `adb` is not available.
+Hold **power 10–15 s** to force it off, power on, and let stock boot first —
+verity is still disabled at this point, so it will. Then:
+
 ```
 adb reboot bootloader
 fastboot flash boot work/backup/out/boot_a.bin
 ```
+
+Stay in bootloader fastboot for steps 3 and 4 — one mode change, not three.
 
 `boot_a.bin` is the unmodified dump, so Magisk's ramdisk patch is gone. Nothing
 else is needed: the Magisk app and `/data/adb` disappear with the userdata wipe
@@ -51,11 +57,17 @@ Note this device is **non-GKI** — the ramdisk lives in `boot`, not `init_boot`
 We disabled it to flash a modified super (CLAUDE.md §6.2). Restoring stock means
 putting it back — flash the same dumps **without** the disable flags:
 
+**Three separate commands** — do not collapse them onto one line:
+
 ```
 fastboot flash vbmeta_a        work/backup/out/vbmeta_a.bin
 fastboot flash vbmeta_system_a work/backup/out/vbmeta_system_a.bin
 fastboot flash vbmeta_vendor_a work/backup/out/vbmeta_vendor_a.bin
 ```
+
+No `--disable-*` flags on any of them: that is what re-enables verity. The
+dumps were taken before any modification, so they still carry the original
+header flags, and flashing them unpatched restores enforcement.
 
 ⚠️ Do this **only after** step 1 completes. Verity on with a modified super is a
 device that does not boot — that exact combination cost us a debugging session.
