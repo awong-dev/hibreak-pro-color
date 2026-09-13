@@ -217,6 +217,11 @@ claim in this file that VNDK absence *blocks* a GSI was wrong.
 1. **§7 GSI** — TrebleDroid Android 16 (`td16-system.img`) staged in `work/gsi/`.
    Flash in fastbootd, then `fastboot -w`. Revert is
    `bin/mtk w super work/releases/super-debloat-v1.bin`.
+2. *(objective 6, later)* LineageOS 23 GSI with phh patches — plan written up in
+   `docs/lineage-23-gsi-build.md`. **Not buildable on this Mac**: needs ~500 GB
+   and a Linux host, so it is a cloud-VM job (~$10–20 on GCP). And it is a
+   **port, not a build** — AndyCGYan's LOS+phh project stops at LineageOS 22, so
+   LOS 23 means rebasing 75 patches plus the GSI device tree onto a newer tree.
 2. `COLOR_MODE_MAGAZINE = 1` is the last untested cell — same method: set
    Magazine on any app, diff `/data/system/disp_policy.db`.
 3. Reverse the **ioctl numbers** for the six `drm_eink_*_ioctl` entries and the
