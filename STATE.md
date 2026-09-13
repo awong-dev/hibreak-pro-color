@@ -1,201 +1,197 @@
 ## Status
-Phase: **2**   Backup verified: **y**, restore path **proven** (2026-09-12)
-Bootloader: **UNLOCKED** (2026-09-12) — `unlocked: yes`, `secure: no`,
-warranty bit tripped. Device wiped and booted clean.
-Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
+Phase: **2** (debloated stock super)
+Backup verified: **y** — restore path **proven** by §5.4
+Bootloader: **UNLOCKED** — `unlocked: yes`, `secure: no`, warranty bit tripped
+Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`, rooted: **no**
+
+Everything below happened 2026-09-12, one session.
+
+---
 
 ## Done
-- [2026-09-12] Toolchain and workspace set up on macOS arm64. No device
-  contact, no RED commands, nothing written to hardware. Details in
-  `TOOLCHAIN.md`.
-  - `bin/mtk` → mtkclient V2.1.4 (`cd25cf9`) in a python3.11 venv; `--help`
-    and `rl --help` verified, `--skip` present.
-  - `bin/hibreak-shell` → `hibreak-tools` Debian container, `./work` at
-    `/work`, loopback7084 scripts (`f49f973`) at `/scripts`.
-  - lpunpack/lpmake/lpdump/lpadd/lpflash built native arm64 → `tools/otatools/bin`,
-    and again inside the container.
-  - adb/fastboot 37.0.1, scrcpy, binwalk 3.1.0, squashfs-tools, e2fsprogs,
-    coreutils.
-  - `work/{backup/out,super,gsi,research}` created, empty.
-  - Loop-mounting ext4 from the macOS bind mount inside Docker: **works**.
-    Phase 2 can operate on `./work` directly.
 
-## Done (cont.)
-- [2026-09-12] §5.1 adb pre-flight **passed**. Read-only, nothing written.
-  - Device authorised over adb; `sys.oem_unlock_allowed=1` — the gate that
-    matters is open.
-  - Identity, boot state, panel geometry and the `ro.vendor.xrz.*` namespace
-    recorded → `work/research/device-identity.md`, `stock-props{,-all}.txt`.
-  - Confirmed on-device: MT6877, system Android 14, 824x1648 @ 300, A/B on
-    slot `_a`, and the §7.2 frontlight sysfs path.
-  - Corrected three CLAUDE.md facts: firmware is V1.0_20251125 (not the 2.x
-    line), vendor is Android **12** not 14, and this is **virtual** A/B.
-  - Not confirmed: that this is the *Color* model. Software says only
-    `HiBreak`/`Smartphone`. See device-identity.md.
+### Toolchain (no device contact)
+- macOS arm64 host set up; details in `TOOLCHAIN.md`, reproducible via
+  `tools/bootstrap.sh`.
+- `bin/mtk` → mtkclient V2.1.4 (`cd25cf9`), python3.11 venv.
+- `bin/hibreak-shell` → `hibreak-tools` Debian container (`./work` at `/work`,
+  loopback7084 `f49f973` at `/scripts`). Smoke-tested; loop-mounting ext4 over
+  the macOS bind mount works. **Not yet used for real work** — `debugfs` on the
+  host turned out to cover everything so far.
+- lpunpack/lpmake/lpdump/lpadd/lpflash built native arm64.
+- adb/fastboot 37.0.1, scrcpy, binwalk, squashfs-tools, e2fsprogs, coreutils.
 
-## Open
-- R1 waveform partition — **ANSWERED**. Partition is literally `waveform`,
-  16 MiB at `0x4cd00000`, no A/B counterpart. Format is a MediaTek image
-  (`0x58881688`) wrapping a 6,482,960-byte E Ink `.awf`, plus a MediaTek
-  signature block. Panel id `EC061KH1C1`, controller `SC1452-FAB`. Extracted to
-  `work/research/waveform.awf`. See `work/backup/MANIFEST.md`.
-- R2 runtime waveform path — **ANSWERED**. `/dev/block/by-name/waveform` →
-  `/data/waveform.bin` (+`.bak`) → `/sys/kernel/debug/eink_debug/waveform` and
-  `machine_waveform`. `/system/bin/xrz_updater --update-waveform` is the writer
-  (and a ready-made tool for writing one back)
-- R3 `eink_debug` enumeration — **partial**. Five nodes recovered from strings:
-  `anti_alias`, `anti_flicker`, `clean_a2`, `waveform`, `machine_waveform`.
-  Full enumeration still **blocked on root** (`adb root` refused on this
-  production build)
-- R4 sysfs ↔ EInk Center mapping — blocked on root. EInk Center is most likely
-  `com.xrz.sys.control`
-- R5 CFA-specific modes — not started
-- R6 Bigme `libgui.so` diff — **ANSWERED**. Four non-AOSP exports:
-  `repaintEverything()`, `setLayerRefreshMode(String8 const&,uint)`,
-  `Transaction::setRefreshMode(sp<SurfaceControl> const&,int)`, and a new AIDL
-  binder method `ISurfaceComposer::remoteSetLayerRefreshMode`. Java side is
-  `xrz.framework.manager.XrzEinkManager`
+### §5.1 pre-flight
+- adb authorised; `sys.oem_unlock_allowed=1`.
+- Identity, boot state, panel geometry, full `ro.vendor.xrz.*` →
+  `work/research/device-identity.md`, `stock-props{,-all}.txt`.
+- Confirmed on-device: MT6877, system Android 14, 824x1648 @ 300, slot `_a`,
+  and the §7.2 frontlight sysfs path.
+- **Corrected three CLAUDE.md facts**: firmware is `V1.0_20251125` (not the 2.x
+  line), vendor is Android **12** not 14, and this is **virtual** A/B.
 
-## Done (cont. 3)
-- [2026-09-12] `super.bin` unpacked with `lpunpack` (10 s) → `work/super/`.
-  Inspected read-only with `debugfs` — no mount, no container, no root needed.
-- [2026-09-12] **§6.2 debloat review complete** → `work/research/debloat-review.md`.
-  Verdict: the removal list is safe for the e-ink stack (all six display-related
-  xrz packages survive, as do libgui/libXrzFramework/xrz_updater/eink_key), but
-  the scripts have three defects and **must not be run as-is**:
-  - 🔴 `repack.sh` omits `lpmake --virtual-ab`, so the repacked super loses the
-    `virtual_ab_device` header flag this device declares. Plausible brick.
-  - 🔴 `repack.sh` silently drops `system_b`, which holds ~57 MB of real extents.
-  - ⚠️ `hosts.txt` is absent from the repo, so the telemetry half no-ops while
-    appearing to succeed (no `set -e`).
-- [2026-09-12] E-ink stack mapped → `work/research/eink-stack.md` (R2, R6, part of R3).
+### §5.2/§5.3 backup — complete
+- `printgpt` → 62 partitions. `waveform` **exists**. `super` is exactly
+  12,884,901,888 bytes, matching the magic number `unpack.sh` checks.
+- 61/61 non-userdata partitions dumped, plus `gpt.bin`, `gpt_backup.bin`.
+- **Preloader captured** from the UFS boot LUNs via `--parttype boot1`/`boot2`
+  (4 MiB each, byte-identical mirrors). Genuine MT6877 `COMBO_BOOT` from
+  `B651/mt6877_android14_qt`, carrying an extractable **EMI v54** DRAM config —
+  the piece mtkclient could not find on its own. This is what makes
+  `--preloader` + BROM mode work, and why its absence would have closed both
+  recovery routes at once.
+- RPMB **not** captured — mtkclient's UFS RPMB read throws `unpack requires a
+  buffer of 12 bytes`. Authenticated and non-restorable by design, so nothing
+  lost.
+- 65 files, 13 GB. SHA256SUMS recorded and re-verified **65/65 OK, 0 failed**,
+  no zero-byte files. `MANIFEST.md`: 0 problems, 0 unclassified.
+- 25 files are all-zero — established as the unpopulated B slot plus genuinely
+  empty partitions, not failed reads. Later confirmed independently by fastboot
+  (`slot-successful:b: no`).
 
-## Next
-1. §6.1 unlock (RED — human runs). Device is sitting in fastboot now.
-   **`md_udc` does not exist on this device** — §6.1's
-   `mtk e metadata,userdata,md_udc` must drop that name or the erase fails.
-2. After unlock the wipe clears Developer Options — re-enable USB debugging
-   and MTP before anything expects adb.
-3. §6.2 debloat — **do not run the scripts unmodified**. Apply the fixes in
-   `work/research/debloat-review.md` first (`--virtual-ab` above all).
-4. Unresolved before flashing a debloated super: EInk Center
-   (`com.xrz.sys.control`) lives in `/data/app`, not `/system`, and its install
-   source could not be pinned down. The init service points at
-   `/system/preinstall`, which does not exist in this image.
-5. Root (Magisk) is now the gating item for R3/R4/R5 — the colour research
-   cannot proceed without it.
+### Gate
+- `work/backup/VERIFIED` written, `work/backup` chmod `a-w` (test write denied).
+- **Deviation: ONE off-machine copy, not the two §5.2 requires** — put to the
+  human, accepted deliberately. Recorded so nobody assumes the stricter rule
+  held.
+- §5.2's command order is wrong and was fixed in CLAUDE.md: `chmod -R a-w` must
+  come *after* `touch VERIFIED`, or the touch fails on a read-only directory.
 
-## Phase 2 started
-- [2026-09-12] `fastboot flashing unlock` — **succeeded**. Returned OKAY with
-  **no on-screen confirmation prompt at all**; no Vol-Up press was needed,
-  contrary to §6.1's expectation. Verified by getvar rather than trusting the
-  OKAY: `unlocked` no→yes, `secure` yes→no, `warranty` yes→no.
-  Worth posting to the HBPC thread — the usual guidance says to expect a
-  physical confirm on this step.
-- [2026-09-12] `unlock_critical` run by the human. **Cannot be independently
-  verified** — MTK's LK exposes no separate getvar for it, so the state reads
-  identical either way. Its real test is flashing a critical partition
-  (`vbmeta`) at §7.4; if that fails on permissions, that is the signal it did
-  not take.
-- [2026-09-12] Rebooted from fastboot. Boot chain observed:
-  fastboot(0x201C) → preloader(0x2000) → Android(0x2008), 101 s.
-  Came up as **PTP-only with no adb** — i.e. Developer Options were wiped,
-  which independently confirms the factory reset happened.
-- **Judgement: skipping §6.1's belt-and-braces `mtk e metadata,userdata` and
-  `mtk da seccfg unlock`.** Those exist because the standard sequence
-  "reportedly needs more" on this model. It did not — the standard sequence
-  unlocked, wiped and booted. Running extra RED writes to fix a problem we do
-  not have is risk without benefit, and `da seccfg unlock` writes the one
-  partition §2.2 singles out as most dangerous. Revisit only if §7.4's vbmeta
-  flash is refused.
-- [2026-09-12] Fastboot exercised read-only. Works; `fastboot getvar all` saved
-  to `work/research/fastboot-getvar.txt`, summarised in `device-identity.md`.
-  - `unlocked: no`, `secure: yes`, `warranty: yes` (not yet tripped).
-  - `slot-successful:b: no` — **independent confirmation slot B was never used**,
-    from a different source than the dump. The all-zero `_b` partitions are real.
+### §5.4 write path — proven
+- `bin/mtk w vbmeta_a work/backup/out/vbmeta_a.bin`. Booted first time, no boot
+  quirk needed. `verifiedbootstate=green` afterwards — AVB *validated the
+  partition we wrote*, which is stronger than a successful boot alone.
+
+### §6.1 unlock — done
+- Fastboot exercised read-only first (`fastboot getvar all` →
+  `work/research/fastboot-getvar.txt`). Pre-unlock it read `unlocked: no`,
+  `secure: yes`, `warranty: yes`.
   - `is-userspace: no` — LK fastboot, not fastbootd. Logical partitions need
     `fastboot reboot fastboot` first (§7.4 already does this).
   - `max-download-size` 128 MiB — larger images must sparse-split over fastboot.
-  - Battery 4300 mV, `battery-soc-ok: yes`.
+- `fastboot flashing unlock` **succeeded with no on-screen confirmation prompt
+  at all** — no Vol-Up press, contrary to §6.1. Verified by getvar rather than
+  trusting the OKAY: `unlocked` no→yes, `secure` yes→no, `warranty` yes→no.
+  Worth posting to the HBPC thread.
+- `unlock_critical` run. **Cannot be independently verified** — MTK's LK exposes
+  no getvar for it. Its real test is the `vbmeta` flash at §7.4; a permissions
+  refusal there is the signal it did not take.
+- Reboot observed: fastboot(`0x201C`) → preloader(`0x2000`) → Android(`0x2008`)
+  in 101 s, coming up **PTP-only with no adb** — Developer Options wiped, which
+  independently confirms the factory reset ran.
+- Post-unlock: `verifiedbootstate=orange`, `flash.locked=0`,
+  `vbmeta.device_state=unlocked`.
+- **Skipped §6.1's belt-and-braces `mtk e metadata,userdata` and
+  `mtk da seccfg unlock`.** They exist because the standard sequence
+  "reportedly needs more" on this model — it did not. Extra RED writes against a
+  problem we do not have is risk without benefit, and `da seccfg unlock` touches
+  the partition §2.2 singles out as most dangerous. Revisit only if §7.4's
+  vbmeta flash is refused.
+- Note `md_udc` **does not exist on this device**; §6.1's erase list names it.
 
-## Phase 1 closed
-- [2026-09-12] §5.4 write path **proven**. `bin/mtk w vbmeta_a` with our own
-  dump; device booted first time, no boot quirk needed.
-  `verifiedbootstate=green` afterwards — AVB *validated the partition we wrote*,
-  which is stronger proof than a successful boot alone: a byte-wrong vbmeta
-  would have gone orange/red or refused to boot. Slot still `_a`,
-  `sys.oem_unlock_allowed` still 1.
+### §6.2 review (no flashing yet)
+- `super.bin` unpacked with `lpunpack` in ~10 s → `work/super/`. Inspected with
+  `debugfs` — no mount, no container, no root.
+- **Review complete → `work/research/debloat-review.md`.** The removal list is
+  safe for the e-ink stack; the scripts are not safe to run as-is. Three
+  defects, see Open below.
+- E-ink stack mapped → `work/research/eink-stack.md` (R2, R6, part of R3).
 
-## Gate
-- [2026-09-12] `work/backup/VERIFIED` written, `work/backup` chmod a-w
-  (test write confirmed denied). **Deviation: ONE off-machine copy, not the two
-  §5.2 requires** — accepted deliberately by the human after the trade-off was
-  put to them. Recorded so nobody later assumes the stricter rule was met.
-  Note §5.2's command order is wrong: `chmod -R a-w` must come *after*
-  `touch VERIFIED`, or the touch fails on a read-only directory. Fixed in
-  CLAUDE.md.
+---
 
-## Done (cont. 2)
-- [2026-09-12] **Full backup complete.** 61/61 non-userdata partitions plus
-  `gpt.bin`/`gpt_backup.bin`, 13 GB in `work/backup/out`.
-  - `printgpt` → 62 partitions. `waveform` **exists**; `super` is exactly
-    12,884,901,888 bytes, matching the magic number `unpack.sh` checks.
-  - SHA256SUMS recorded and re-verified: **63/63 OK, 0 failed**.
-  - `MANIFEST.md` generated by `bin/make-manifest.py`: 0 problems,
-    0 unclassified.
-  - 25 files are all-zero; established this is the unpopulated B slot plus
-    genuinely empty partitions, not failed reads.
-  - **Preloader captured** via `--parttype boot1`/`boot2` (4 MiB each, mirrors).
-    Genuine MT6877 `COMBO_BOOT` built from `B651/mt6877_android14_qt`. Yields
-    an extractable **EMI v54** DRAM config — the piece mtkclient could not find
-    on its own, and what makes `--preloader` + BROM mode work from now on.
-  - RPMB **not** captured: mtkclient's UFS RPMB read is broken (`unpack requires
-    a buffer of 12 bytes`). Non-restorable by design, so nothing is lost.
-  - Final state: 65 files, 13 GB, SHA256SUMS re-verified **65/65 OK**.
+## Open
+
+- R1 waveform partition — **ANSWERED**. `waveform`, 16 MiB at `0x4cd00000`, no
+  A/B. MediaTek image (`0x58881688`) wrapping a 6,482,960-byte E Ink `.awf`,
+  plus a MediaTek signature block. Panel `EC061KH1C1`, controller `SC1452-FAB`.
+  Extracted → `work/research/waveform.awf`.
+- R2 runtime waveform path — **ANSWERED**. `/dev/block/by-name/waveform` →
+  `/data/waveform.bin` (+`.bak`) → `/sys/kernel/debug/eink_debug/waveform` and
+  `machine_waveform`. `/system/bin/xrz_updater --update-waveform` is the writer.
+- R3 `eink_debug` enumeration — **partial**. Five nodes from strings:
+  `anti_alias`, `anti_flicker`, `clean_a2`, `waveform`, `machine_waveform`.
+  Full enumeration **blocked on root**.
+- R4 sysfs ↔ EInk Center mapping — **blocked on root**. EInk Center is
+  `com.xrz.sys.control`.
+- R5 CFA-specific modes — not started. Blocked behind R3/R4.
+- R6 Bigme `libgui.so` — **ANSWERED**, and larger than §7.1 described. Four
+  non-AOSP exports: `repaintEverything()`,
+  `setLayerRefreshMode(String8 const&, uint)`,
+  `Transaction::setRefreshMode(sp<SurfaceControl> const&, int)`, and a new AIDL
+  binder method `ISurfaceComposer::remoteSetLayerRefreshMode`. Java side is
+  `xrz.framework.manager.XrzEinkManager`, which lives in the framework.
+
+### Blocking the debloat
+- 🔴 `repack.sh` omits `lpmake --virtual-ab`; our super's header declares
+  `virtual_ab_device`. Plausible brick. One-flag fix.
+- 🔴 `repack.sh` silently drops `system_b` (~57 MB of real extents).
+- ⚠️ `hosts.txt` is absent from the repo and there is no `set -e`, so the
+  telemetry half of `safedebloat.sh` no-ops while reporting success.
+- ⚠️ **Unresolved**: EInk Center (`com.xrz.sys.control`) lives in `/data/app`,
+  not `/system`. The init service runs `xrz_start.sh preinstall
+  /system/preinstall`, but that directory does not exist in this image, and the
+  recorded installer is `com.android.settings`. So what happens to EInk Center
+  after flashing a debloated super and wiping is **not established**.
+
+---
+
+## Next
+1. Decide root (Magisk). It gates R3/R4/R5 — the entire colour research — and
+   would also let us resolve the EInk Center question above.
+2. §6.2 debloat, only after applying the fixes in `debloat-review.md`.
+3. §7 GSI. Remember vendor is Android **12**, and `max-download-size` is 128 MiB.
+
+---
 
 ## Traps hit
-- macOS cannot loop-mount ext4 and the loopback7084 scripts are GNU/Linux-only
-  (`stat -c`, `mount -o loop`, `resize2fs`, `locate`) → all image-filesystem
-  work goes through `bin/hibreak-shell`.
-- Every `mtk.py` invocation died with `OSError: Unable to find libfuse`
-  → `mfusepy` was installed but macFUSE was not, and mtkclient only catches
-  `ImportError` → uninstalled `mfusepy`; the import now fails cleanly.
-- `lpunpack_and_lpmake` doesn't build on modern macOS out of the box (three
-  separate issues) → `tools/otatools-src/make-macos.sh`, see TOOLCHAIN.md.
 - **mtkclient hangs at "Uploading stage 2" in BROM mode on this device.** Stage 2
-  runs from DRAM and BROM has not initialised it; mtkclient tries to supply a
-  DRAM config by matching the storage CID against its bundled preloaders, but
-  that matching code is eMMC-only and this is a **UFS** device, so it matched
-  dozens of wrong preloaders (`DA exceed max num 0xc0070005` over and over).
-  This will hit *every* UFS MediaTek device, and is not macOS-specific.
-  → **Use preloader mode instead**; the preloader has already brought DRAM up,
-  and mtkclient skips the whole EMI step (`elif connagent == b"preloader"`).
-- Getting into preloader mode: a **cold plug-in boots straight past the window**
-  into Android. What works is warm — start `mtk <cmd>` so it is polling, then
-  `adb reboot`. Scripted in the session scratchpad; the pattern is: poll first,
-  reboot second.
-- mtkclient cannot re-attach to a device already sitting in DA mode
-  ("Please disconnect, start mtkclient and reconnect") — each command needs a
-  fresh preloader catch.
-- A `vbmeta_*_b` / `boot_b` dumping as all-zero is **normal** here, not a failed
-  read. Slot B has never been written.
+  runs from DRAM which BROM has not initialised; mtkclient's search for a DRAM
+  config matches the storage CID against bundled preloaders, but that code is
+  **eMMC-only** and this is **UFS** — so it matched dozens of wrong preloaders
+  (`DA exceed max num 0xc0070005`, repeatedly). Hits every UFS MediaTek device;
+  not macOS-specific.
+  → Use **preloader mode**, or now `--preloader work/backup/out/preloader_boot1.bin`.
+- Reaching preloader mode: a **cold plug-in boots straight past the window** into
+  Android. What works is **warm** — start `mtk <cmd>` polling *first*, then
+  `adb reboot`.
+- mtkclient sometimes refuses a device already in DA mode ("Please disconnect,
+  start mtkclient and reconnect") — but **not always**: the `--parttype boot1`
+  dumps attached fine straight from DA mode. If refused, hold power 10–15 s and
+  use the warm-reboot recipe.
+- Every `mtk.py` invocation died with `OSError: Unable to find libfuse` →
+  `mfusepy` installed without macFUSE, and mtkclient only catches `ImportError`.
+  Fixed by uninstalling `mfusepy`.
+- `lpunpack_and_lpmake` doesn't build on modern macOS (three separate issues) →
+  `tools/otatools/build-macos.sh`, documented in TOOLCHAIN.md.
+- The loopback7084 scripts are GNU/Linux-only (`stat -c`, `mount -o loop`,
+  `resize2fs`, `locate`) → `bin/hibreak-shell`. **But note**: only *modifying*
+  an image needs that. `debugfs` reads ext4 natively on macOS with no mount and
+  no root, which is how all the analysis was actually done.
+- `_b` partitions dumping as all-zero is **normal** here. Slot B has never been
+  written; fastboot's `slot-successful:b: no` confirms it independently.
+- `/system/eink_key` is a second `.awf` but for a **10.3" panel**
+  (`EC103KH2C1`), not this 6.1" one. Do not mistake it for this device's
+  waveform.
+
+---
 
 ## Not backed up, and not backupable
-- `userdata` (~241 GB) — skipped by design; will be **wiped** at unlock.
-  [2026-09-12] Human confirms there is no personal data on the device — it is
-  new. The wipe costs nothing, and this is no longer a blocker on §6.1.
+- `userdata` (~241 GB) — skipped by design, wiped at unlock. Human confirmed the
+  device was new with no personal data, so this cost nothing.
 - **RPMB** — mtkclient's UFS read fails; authenticated and non-restorable anyway.
-- **SoC efuses** — secure-boot config burned into silicon. SBC/SLA/DAA are all
-  currently *disabled*, and that is the safety net the entire recovery story
-  rests on. Nothing we do should ever change it; `seccfg` is the lever that
-  could, which is why §2.2 says write it last or never.
+- **SoC efuses** — burned into silicon. `SBC`/`SLA`/`DAA` are all *disabled*, and
+  that is the safety net the entire recovery story rests on. `seccfg` is the
+  lever that could change it, which is why §2.2 says write it last or never.
 
-## Unverified / watch out
-- mtkclient has never talked to this device. The BROM path on macOS is
-  **unproven**; find out before depending on it for the full dump.
-- The device is a HiBreak Pro *Color* on the human's say-so, not on anything
-  software reported. Expect this to resolve via R1.
+---
+
+## Watch out
+- **`unlock_critical` is unverified** (see above). First real test is §7.4.
+- The device is a HiBreak Pro **Color** on the human's say-so plus one piece of
+  evidence: the waveform names panel `EC061KH1C1`, and E Ink's `EC` prefix is
+  used for its colour families. Software identity still says only
+  `HiBreak`/`Smartphone`. Treat the prefix reading as inference, not fact.
 - USB default mode is PTP, not the MTP §5.1 asks for. adb and mtkclient don't
-  care, so this is not blocking — noted only so it isn't mistaken for a fault.
-- Virtual A/B changes what `super` looks like. Check `printgpt`/`lpdump` for
-  whether `_b` copies exist before trusting the loopback7084 repack geometry.
+  care — noted only so it isn't mistaken for a fault.
+- `work/backup/` is `chmod a-w`. To add to it you must `chmod u+w` first; do not
+  do that casually.

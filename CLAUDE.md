@@ -129,28 +129,42 @@ Android base, different firmware line.
 ├── TOOLCHAIN.md           # what's installed, what runs where, build gotchas
 ├── bin/
 │   ├── mtk                # mtkclient wrapper (project venv)
-│   └── hibreak-shell      # root Linux shell for ext4/super work
+│   ├── make-manifest.py   # regenerates work/backup/MANIFEST.md (§5.3)
+│   └── hibreak-shell      # root Linux shell for ext4/super *modification*
 ├── tools/
+│   ├── bootstrap.sh       # one-shot setup for a fresh checkout, idempotent
 │   ├── env.sh             # `source tools/env.sh` — puts the above on PATH
 │   ├── docker/            # Dockerfile for the Linux toolbox
-│   ├── mtkclient/
-│   ├── hibreak_pro_color_scripts/   # loopback7084 — HBPC super tooling
-│   └── otatools/                    # lpunpack, lpmake
-└── work/
-    ├── backup/            # READ-ONLY once verified. chmod -R a-w it.
-    │   ├── printgpt.txt
-    │   ├── SHA256SUMS
-    │   ├── MANIFEST.md    # generated, see §5.3
-    │   ├── VERIFIED       # gate file
-    │   └── out/*.bin
-    ├── super/             # unpacked / modified super work area
-    ├── gsi/               # downloaded + patched GSIs
-    └── research/          # waveform analysis, sysfs dumps, notes
+│   ├── otatools/build-macos.sh      # builds lpunpack/lpmake on macOS
+│   ├── mtkclient/                   # gitignored, cloned by bootstrap
+│   ├── hibreak_pro_color_scripts/   # loopback7084 — see debloat-review.md
+│   └── otatools/bin/                # gitignored, built binaries
+└── work/                  # ALL gitignored — per-unit data, tens of GB
+    ├── backup/            # READ-ONLY. chmod -R a-w applied 2026-09-12.
+    │   ├── printgpt.txt · SHA256SUMS · MANIFEST.md · VERIFIED
+    │   ├── hwparam.json · mtkclient-state.json   # MEID/SOC_ID/CID
+    │   └── out/*.bin      # 61 partitions + gpt, gpt_backup,
+    │                      # preloader_boot1, preloader_boot2
+    ├── super/             # lpunpack output: {system,vendor,product,system_ext}_a.img
+    ├── gsi/               # downloaded + patched GSIs (empty)
+    └── research/
+        ├── device-identity.md   # §5.1 props, boot state, fastboot getvar
+        ├── eink-stack.md        # R2/R3/R6 — how the panel is actually driven
+        ├── debloat-review.md    # §6.2 review: 3 defects, do not run as-is
+        ├── waveform.awf         # extracted from the waveform partition
+        └── extract/             # eink_key, xrz_updater, xrz_start.sh, libs
 ```
 
-Host is macOS/arm64, which cannot loop-mount ext4. Anything that mounts, resizes
-or fscks a filesystem image runs in the Linux container via `bin/hibreak-shell`;
-mtkclient/adb/fastboot stay on the host because they need USB. See
+**Read `TOOLCHAIN.md` §"Talking to the device" before running `bin/mtk`.**
+BROM mode hangs on this device unless `--preloader` is passed; the reasons are
+non-obvious and cost a 20-minute stall to rediscover.
+
+Host is macOS/arm64. mtkclient, adb and fastboot run on the host because they
+need USB. For filesystem images the split is narrower than first assumed:
+**reading** inside an ext4 image needs no mount, no root and no container —
+`debugfs -R "ls …" img` works natively, and that is how the §6.2 review and the
+R2/R6 work were done. Only operations that **modify** an image (`mount -o loop`,
+`resize2fs`, `e2fsck`, the debloat itself) need `bin/hibreak-shell`. See
 `TOOLCHAIN.md`.
 
 ---
