@@ -109,6 +109,32 @@ Everything below happened 2026-09-12, one session.
   Magisk UI; `scrcpy` was what made that UI usable, since the e-ink panel
   redraws too poorly to trust toggle state.
 
+### Stock reference measurement (2026-09-13)
+Booted the saved debloated stock and compared against the GSI. No root on stock
+(Magisk went with the wipe), so debugfs was closed — but the useful comparison
+did not need it.
+
+**Format and composition mode are NOT the difference.** Stock uses exactly the
+same client target as the GSI: `size=[1648 824]`, `default-format=1`
+(RGBA_8888), `usesClientComposition=true`. Geometry identical too —
+`real 824 x 1648`, `installOrientation ROTATION_270`, `rotation 0`, density 300.
+So the rotation and pixel-format hypotheses are both dead.
+
+**Two real differences:**
+1. **26 `vendor.xrz.*` runtime properties are set on stock and ALL unset on the
+   GSI** — captured verbatim to `stock-ref/vendor-xrz.txt` and turned into
+   `bin/apply-xrz-props`. Notable: `enable_gpu_image_process=1`,
+   `regal_support=1`, `hwc.color_restoration_suppoort=1`,
+   `disable_eink_vsync=1`, `hwc_idle=1`, `gray_256_dither=0`,
+   `global_color_mode=0`, `bootanimation_refresh_mode=180`.
+   Note `vendor.xrz.screen_type` is **not** among them — only
+   `ro.vendor.xrz.screen_type` exists, so setting the runtime form earlier was
+   pointless.
+2. **Stock composes 8 layers CLIENT + 5 DEVICE; the GSI does 100% CLIENT.** The
+   vendor HWC accepts no layer for hardware composition under the GSI —
+   consistent with its validate step failing on the missing `vendor.xrz.*`
+   state.
+
 ### Kernel driver mapped (rooted)
 - 360 `eink` symbols from `/proc/kallsyms` → `work/research/kallsyms-eink.txt`.
 - **Six DRM ioctls** on `/dev/dri/card0`: update, get_type, **reload_waveform**,
@@ -223,12 +249,8 @@ claim in this file that VNDK absence *blocks* a GSI was wrong.
 ---
 
 ## Next
-0. **Reference measurement**: boot the saved debloated stock and read
-   `/sys/kernel/debug/dri/0/framebuffer` + `/dev/kernel/debug/dri/0/state`
-   during a refresh, to learn what `format`/`modifier`/`pitch` a *working*
-   display uses. Everything about the GSI's tiling has been guesswork without
-   this. Revert to GSI afterwards with
-   `fastboot flash system work/gsi/td16-system.img`.
+0. **Reference measurement DONE** → `work/research/stock-ref/`. Result below.
+   Reflash the GSI and run `bin/apply-xrz-props`.
 1. **Try TrebleDroid A15** (`work/gsi/td15-system.img`, downloaded). One release
    closer to the A12 vendor; its Skia may tolerate this Mali blob. Cheapest
    meaningful test of the GPU problem.

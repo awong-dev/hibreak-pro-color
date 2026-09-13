@@ -1,0 +1,41 @@
+#!/bin/bash
+# Seed the vendor.xrz.* runtime properties the MediaTek/Bigme HWC reads.
+# Captured from booted debloated STOCK on 2026-09-13; all of these are
+# UNSET on a GSI, because Bigme's framework sets them and a GSI replaces it.
+# The composer HAL cannot set them itself -- SELinux denies it
+# (hal_graphics_composer_default -> vendor_default_prop), so they must be
+# seeded from a root shell.
+set -uo pipefail
+A=/opt/homebrew/bin/adb
+$A shell "su -c '
+setprop vendor.xrz.anti_flicker_enabled 0
+setprop vendor.xrz.antutu_test 0
+setprop vendor.xrz.auto_clean_enabled 1
+setprop vendor.xrz.bootanimation_refresh_mode 180
+setprop vendor.xrz.check_commit 0
+setprop vendor.xrz.clean_frequency 0
+setprop vendor.xrz.disable_cursor_blink 0
+setprop vendor.xrz.disable_eink_vsync 1
+setprop vendor.xrz.disable_input 0
+setprop vendor.xrz.disable_inputmethod_fullscreen 1
+setprop vendor.xrz.enable_gpu_image_process 1
+setprop vendor.xrz.enable_home_clean 0
+setprop vendor.xrz.force_global_refresh_mode -1
+setprop vendor.xrz.fps_limit 0
+setprop vendor.xrz.global_brightness_level 0
+setprop vendor.xrz.global_color_enhance 0
+setprop vendor.xrz.global_color_mode 0
+setprop vendor.xrz.global_contrast 0
+setprop vendor.xrz.global_text_enhance 0
+setprop vendor.xrz.gray_256_dither 0
+setprop vendor.xrz.hwc.color_restoration_suppoort 1
+setprop vendor.xrz.hwc.image_smoothing_suppoort 0
+setprop vendor.xrz.hwc_idle 1
+setprop vendor.xrz.logo_refresh_mode -2147483471
+setprop vendor.xrz.regal_support 1
+setprop vendor.xrz.scroll_flip_type 0
+'"
+echo "seeded 26 properties; restarting composer + surfaceflinger"
+$A shell "su -c 'pkill -f composer@2.3; setprop ctl.restart surfaceflinger'"
+sleep 14
+$A shell "su -c 'getprop | grep -c ^.vendor.xrz'"
