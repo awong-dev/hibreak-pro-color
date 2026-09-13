@@ -48,12 +48,13 @@ Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
 - R6 Bigme `libgui.so` diff — not started
 
 ## Next
-1. **Human: make two off-machine copies of `work/backup/` (13 GB).** Nothing
-   else happens until this is done — it is the §5.2 gate and no RED command may
-   be proposed before `VERIFIED` exists.
-2. Agent: `chmod -R a-w work/backup` + `touch work/backup/VERIFIED`.
-3. Capture the **preloader** from the UFS boot LUNs — not in the GPT, so `rl`
-   missed it. `CRITICAL-UNIQUE`, and having it makes BROM mode work directly.
+1. **Human: save anything personal off the phone.** Unlocking factory-resets and
+   §7.4 opens with `fastboot -w`. `userdata` is deliberately not in the backup
+   and §2.2 forbids restoring it — so photos, notes, sideloaded books and app
+   data are gone at that point unless saved separately now.
+2. **Human: make two off-machine copies of `work/backup/` (13 GB).** The §5.2
+   gate. No RED command may be proposed before `VERIFIED` exists.
+3. Agent: `chmod -R a-w work/backup` + `touch work/backup/VERIFIED`.
 4. §5.4 prove the write path (RED, human runs).
 
 ## Done (cont. 2)
@@ -66,8 +67,13 @@ Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
     0 unclassified.
   - 25 files are all-zero; established this is the unpopulated B slot plus
     genuinely empty partitions, not failed reads.
-  - **Not a complete restore set**: the preloader lives in the UFS boot LUNs
-    (`LU1`/`LU2`), which `rl` does not read.
+  - **Preloader captured** via `--parttype boot1`/`boot2` (4 MiB each, mirrors).
+    Genuine MT6877 `COMBO_BOOT` built from `B651/mt6877_android14_qt`. Yields
+    an extractable **EMI v54** DRAM config — the piece mtkclient could not find
+    on its own, and what makes `--preloader` + BROM mode work from now on.
+  - RPMB **not** captured: mtkclient's UFS RPMB read is broken (`unpack requires
+    a buffer of 12 bytes`). Non-restorable by design, so nothing is lost.
+  - Final state: 65 files, 13 GB, SHA256SUMS re-verified **65/65 OK**.
 
 ## Traps hit
 - macOS cannot loop-mount ext4 and the loopback7084 scripts are GNU/Linux-only
@@ -95,6 +101,14 @@ Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
   fresh preloader catch.
 - A `vbmeta_*_b` / `boot_b` dumping as all-zero is **normal** here, not a failed
   read. Slot B has never been written.
+
+## Not backed up, and not backupable
+- `userdata` (~241 GB) — skipped by design; will be **wiped** at unlock.
+- **RPMB** — mtkclient's UFS read fails; authenticated and non-restorable anyway.
+- **SoC efuses** — secure-boot config burned into silicon. SBC/SLA/DAA are all
+  currently *disabled*, and that is the safety net the entire recovery story
+  rests on. Nothing we do should ever change it; `seccfg` is the lever that
+  could, which is why §2.2 says write it last or never.
 
 ## Unverified / watch out
 - mtkclient has never talked to this device. The BROM path on macOS is

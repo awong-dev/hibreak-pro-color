@@ -11,3 +11,6 @@ tools/otatools/bin/
 # storage CID). Copies live with the backup in work/backup/.
 /.state
 /hwparam.json
+
+# macOS finder droppings
+.DS_Store

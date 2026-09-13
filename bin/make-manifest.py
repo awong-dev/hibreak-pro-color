@@ -49,6 +49,67 @@ def human(n):
         if n < 1024 or u == 'GiB': return f'{n:.0f} {u}' if u=='B' else f'{n:.1f} {u}'
         n /= 1024
 
+ANALYSIS = """
+## All-zero partitions — not read failures
+
+25 of the dumped files are entirely zero. This is a systematic pattern, not bad
+reads:
+
+- **Every `_b` partition is empty.** The device has never taken an OTA, so slot
+  B has never been written. Every `_a` counterpart carries real data and real
+  magic (`boot_a` = `ANDROID!`, `vbmeta_a` = `AVB0`, `lk_a` = MediaTek
+  `0x58881688`).
+- `init_boot_a` **and** `vendor_boot_a` are also zero — this build keeps the
+  ramdisk in `boot_a` rather than using the GKI split, consistent with an
+  Android 12 vendor.
+- `otp`, `sec1`, `mrdump` are empty by nature.
+
+If reads were failing we would expect corruption scattered across A-slot
+partitions too. We do not.
+
+## The preloader, and why it matters more than it looks
+
+`preloader_boot1.bin` is a genuine MT6877 preloader: `COMBO_BOOT` magic, built
+from `B651/mt6877_android14_qt` (the `B651` matches this unit's serial prefix).
+`boot2` is a byte-identical mirror.
+
+It carries an extractable **EMI v54** DRAM config (1288 bytes, `MTK_BLOADER_INFO_v54`).
+That is the piece mtkclient could not find on its own, and the reason the first
+BROM attempt hung forever at "Uploading stage 2".
+
+The chain worth understanding: recovery from a bad flash means BROM + mtkclient;
+mtkclient in BROM cannot load its DA without a DRAM config; its own search is
+eMMC-only and fails on this UFS device. Without this file, a corrupted preloader
+would close *both* recovery routes at once. With it, `--preloader` makes BROM
+work directly.
+
+## R1 — the waveform partition, answered
+
+`waveform` is a **MediaTek-wrapped image**, not a raw blob:
+
+```
+0x000  magic 0x58881688, payload size 0x62ec10, name "waveform"
+0x030  ext header 0x58891689, header length 0x200
+0x200  payload begins -- an E Ink .awf file
+       "570_VSK031_HV7501_EC061KH1C1_SC1452-FAB_TC.awf 2025.12.8.14:36:3:"
+       6,482,960 bytes, real data to 0x62e808
+0x62ee10+ MediaTek signature block (an embedded "Mediatek" cert1 X.509)
+```
+
+Extracted to `work/research/waveform.awf`
+(sha256 `ce22da32a28f61393ff691c539d442f65978d4076b5b5cb1cb0b25921a8e5d26`).
+
+Panel identifier **`EC061KH1C1`**, controller `SC1452-FAB`, plus `HV7501`.
+`061` is consistent with the 6.1" panel. E Ink's `EC` prefix is used for its
+colour families, which — if that reading is right — is the first thing on this
+device corroborating the "Color" claim; software identity says only
+`HiBreak`/`Smartphone`. Treat the prefix reading as inference, not fact.
+
+Rewrapping for a flash back needs the MediaTek header **and** that signature
+block preserved, so keep `waveform.bin`, not just the `.awf`.
+"""
+
+
 def main():
     if not os.path.exists(GPT):
         sys.exit(f'missing {GPT} -- run `bin/mtk printgpt | tee work/backup/printgpt.txt` first')
@@ -102,11 +163,24 @@ def main():
             for p in problems: f.write(f'- {p}\n')
             f.write('\n')
 
-        f.write('## Not covered by this backup\n\n'
-                'The **preloader is not in the GPT** — on this UFS device it lives in the\n'
-                'boot LUNs (`LU1`/`LU2`, 4 MiB each), which `mtk rl` does not read. This\n'
-                'backup is therefore *not* a complete restore set. The preloader is\n'
-                '`CRITICAL-UNIQUE` and still needs capturing separately.\n\n')
+        have_pl = os.path.exists(os.path.join(OUT, 'preloader_boot1.bin'))
+        f.write('## Coverage beyond the GPT\n\n')
+        if have_pl:
+            f.write('The preloader is **not** in the GPT — on this UFS device it lives in the\n'
+                    'boot LUNs (`LU1`/`LU2`, 4 MiB each), which `mtk rl` does not read. It has\n'
+                    'been captured separately via `--parttype boot1` / `boot2` and is present\n'
+                    'as `preloader_boot1.bin` / `preloader_boot2.bin`.\n\n')
+        else:
+            f.write('**The preloader is missing.** It is not in the GPT — on this UFS device it\n'
+                    'lives in the boot LUNs (`LU1`/`LU2`), which `mtk rl` does not read. Capture\n'
+                    'it with `bin/mtk r pl out/preloader_boot1.bin --parttype boot1`.\n\n')
+        f.write('Still not covered, and not coverable:\n\n'
+                '- `userdata` — skipped by design (§5.2) and wiped rather than restored (§2.2).\n'
+                '- **RPMB** — mtkclient\'s UFS RPMB read fails (`unpack requires a buffer of 12\n'
+                '  bytes`). Authenticated and non-restorable by design, so this costs us nothing.\n'
+                '- **SoC efuses** — secure-boot config burned into silicon. Not backupable by\n'
+                '  any tool. Currently SBC/SLA/DAA are all *disabled*, which is the safety net\n'
+                '  the whole recovery story rests on.\n\n')
 
         f.write('## Partitions\n\n')
         f.write('| Partition | Offset | GPT size | A/B | On disk | Status | Class | sha256 |\n')
@@ -116,14 +190,20 @@ def main():
                     f'| {human(size) if size is not None else "—"} | {status} | {cls} '
                     f'| `{digest[:16]}…` |\n')
 
+        WHY = {
+            'gpt':        'primary partition table, dumped by mtkclient alongside the partitions',
+            'gpt_backup': 'backup partition table at the end of the device',
+            'preloader_boot1': 'UFS boot LUN 1 — **the preloader**. CRITICAL-UNIQUE. '
+                               'Pass to `--preloader` to make BROM mode usable',
+            'preloader_boot2': 'UFS boot LUN 2 — mirror of boot1 (verified byte-identical)',
+        }
         extras = sorted(f_[:-4] for f_ in os.listdir(OUT)
                         if f_.endswith('.bin') and f_[:-4] not in names)
         if extras:
             f.write('\n## Extra files (not GPT partitions)\n\n')
             for e in extras:
                 sz = os.path.getsize(os.path.join(OUT, f'{e}.bin'))
-                f.write(f'- `{e}.bin` — {human(sz)} — dumped by mtkclient alongside '
-                        f'the partitions; useful for restoring the partition table.\n')
+                f.write(f'- `{e}.bin` — {human(sz)} — {WHY.get(e, "unexplained; review")}\n')
 
         f.write('\n## Unclassified\n\n')
         if unclassified:
@@ -133,6 +213,8 @@ def main():
                 f.write(f'- `{n}` — {human(length)} at `0x{off:x}`\n')
         else:
             f.write('None. Every partition matched a known MediaTek/AOSP name.\n')
+
+        f.write(ANALYSIS)
 
         f.write('\n## Full sha256\n\n```\n')
         for name, _,_,_,_,_, digest, _ in rows:
