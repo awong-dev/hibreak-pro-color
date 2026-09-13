@@ -6,3 +6,8 @@ tools/mtkclient/
 tools/hibreak_pro_color_scripts/
 tools/otatools-src/
 tools/otatools/bin/
+
+# mtkclient drops these in the cwd; they carry per-unit ids (MEID, SOC_ID,
+# storage CID). Copies live with the backup in work/backup/.
+/.state
+/hwparam.json
