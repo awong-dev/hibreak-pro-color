@@ -1,6 +1,7 @@
 ## Status
 Phase: **2**   Backup verified: **y**, restore path **proven** (2026-09-12)
-Bootloader: locked (OEM unlock toggle ON)
+Bootloader: **UNLOCKED** (2026-09-12) — `unlocked: yes`, `secure: no`,
+warranty bit tripped. `unlock_critical` still pending.
 Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
 
 ## Done
@@ -58,6 +59,12 @@ Currently running: stock `Bigme_HiBreak_V1.0_20251125`, slot `_a`
    re-dump needed.
 
 ## Phase 2 started
+- [2026-09-12] `fastboot flashing unlock` — **succeeded**. Returned OKAY with
+  **no on-screen confirmation prompt at all**; no Vol-Up press was needed,
+  contrary to §6.1's expectation. Verified by getvar rather than trusting the
+  OKAY: `unlocked` no→yes, `secure` yes→no, `warranty` yes→no.
+  Worth posting to the HBPC thread — the usual guidance says to expect a
+  physical confirm on this step.
 - [2026-09-12] Fastboot exercised read-only. Works; `fastboot getvar all` saved
   to `work/research/fastboot-getvar.txt`, summarised in `device-identity.md`.
   - `unlocked: no`, `secure: yes`, `warranty: yes` (not yet tripped).
