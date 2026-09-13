@@ -1,0 +1,50 @@
+#!/bin/bash
+# Try a framebuffer/composition setting and report what the kernel actually got.
+#
+#   bin/fbtry                                   # just show current state
+#   bin/fbtry vendor.debug.hwc.disp_support_decompress 1
+#   bin/fbtry debug.renderengine.backend skiaglthreaded
+#
+# Restarts the composer and SurfaceFlinger, then prints the real DRM framebuffer.
+# Everything here is runtime-only: a reboot reverts it.
+set -uo pipefail
+A=/opt/homebrew/bin/adb
+
+if [ $# -eq 2 ]; then
+    echo "setting $1 = $2"
+    $A shell "su -c 'setprop $1 \"$2\"'"
+    echo "restarting composer + surfaceflinger..."
+    $A shell "su -c 'pkill -f composer@2.3; setprop ctl.restart surfaceflinger'" 2>/dev/null
+    sleep 14
+fi
+
+echo "--- DRM framebuffers (what the panel driver is handed) ---"
+$A shell "su -c 'cat /sys/kernel/debug/dri/0/framebuffer'" 2>/dev/null | tr -d '\r' > /tmp/fbtry.txt
+python3 - <<'PYEOF'
+import re
+FOURCC={'AB24':'ABGR8888 (32bpp)','AR24':'ARGB8888 (32bpp)','XR24':'XRGB8888 (32bpp)',
+        'AB30':'ABGR2101010 (30bpp)','RG16':'RGB565 (16bpp)','RGB8':'RGB332 (8bpp)',
+        'C8  ':'C8 palette (8bpp)','R8  ':'R8 grey (8bpp)'}
+txt=open('/tmp/fbtry.txt').read()
+for blk in txt.split('framebuffer[')[1:]:
+    fid=blk.split(']')[0]
+    g=lambda k,d='?': (re.search(k,blk).group(1) if re.search(k,blk) else d)
+    size=g(r'size=(\d+x\d+)')
+    if size!='1648x824': continue
+    fmt=g(r'format=(\S+)'); mod=g(r'modifier=(\S+)'); pit=g(r'pitch\[0\]=(\d+)')
+    who=g(r'allocated by = (.*)').strip()
+    bpp=int(pit)/1648 if pit.isdigit() else 0
+    lin='LINEAR' if mod=='0x0' else f'COMPRESSED {mod}'
+    print(f"   fb[{fid}] {fmt:<5} {FOURCC.get(fmt,'?'):<20} {lin:<26} pitch={pit} ({bpp:.0f} B/px)  by {who}")
+PYEOF
+
+echo "--- SurfaceFlinger client target ---"
+$A shell "timeout 15 dumpsys SurfaceFlinger" 2>/dev/null | tr -d '\r' \
+  | grep -aE "^   size=\[|default-format=" | head -2
+
+echo "--- health ---"
+printf "   surfaceflinger pid: %s   composer pid: %s\n" \
+  "$($A shell 'pidof surfaceflinger' 2>/dev/null | tr -d '\r')" \
+  "$($A shell 'su -c "pgrep -f composer@2.3 | head -1"' 2>/dev/null | tr -d '\r')"
+echo "   last panel refresh:"
+$A shell "su -c 'dmesg | grep \"wait frame done\" | tail -1'" 2>/dev/null | tr -d '\r' | sed 's/^/     /'
