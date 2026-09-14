@@ -258,37 +258,33 @@ claim in this file that VNDK absence *blocks* a GSI was wrong.
 
 ---
 
-## Next
--1. **The tiling is a 4:1 PIXEL PACKING mismatch** — see
-   `docs/gsi-display-analysis.md`. An independent report of the identical
-   artefact on the **mono** HiBreak Pro (xda post 90611816, unanswered) kills
-   the CFA hypothesis: a mono panel has no colour filter array. `eink_ldl=412 =
-   1648/4` — the EPD takes four pixels per clock and is being fed one byte per
-   pixel. Next: read stock's DRM framebuffer *pitch* during a live commit, which
-   needs root on stock (re-flash `work/root/magisk_patched-30700_TKoNu.img`).
-0. **Reference measurement DONE** → `work/research/stock-ref/`. Result below.
-   Reflash the GSI and run `bin/apply-xrz-props`.
-1. **Try TrebleDroid A15** (`work/gsi/td15-system.img`, downloaded). One release
-   closer to the A12 vendor; its Skia may tolerate this Mali blob. Cheapest
-   meaningful test of the GPU problem.
-2. Force **HWC-only composition** so SurfaceFlinger never calls RenderEngine.
-   ⚠️ NOT `service call SurfaceFlinger 1008 i32 1` — that *forces* GPU
-   composition, the path that hangs. §7.5's advice is from the mono device and
-   is backwards here.
-3. Drive **`drm_eink_update_ioctl`** directly, bypassing SurfaceFlinger.
-2. *(objective 6, later)* LineageOS 23 GSI with phh patches — plan written up in
-   `docs/lineage-23-gsi-build.md`. **Not buildable on this Mac**: needs ~500 GB
-   and a Linux host, so it is a cloud-VM job (~$10–20 on GCP). And it is a
-   **port, not a build** — AndyCGYan's LOS+phh project stops at LineageOS 22, so
-   LOS 23 means rebasing 75 patches plus the GSI device tree onto a newer tree.
-2. `COLOR_MODE_MAGAZINE = 1` is the last untested cell — same method: set
-   Magazine on any app, diff `/data/system/disp_policy.db`.
-3. Reverse the **ioctl numbers** for the six `drm_eink_*_ioctl` entries and the
-   structs they take. That is what a GSI-side panel driver would need, and it is
-   offline work on the kernel in `boot_a`.
-4. §7 GSI. Vendor is Android **12**; `max-download-size` is 128 MiB.
+## Next — pixel packing
 
----
+**→ `docs/pixel-packing-investigation.md` is the entry point.** It has the
+evidence, the ruled-out list, the tools, and the recipe to rebuild the GSI state
+(the device was reverted to factory stock at the end of the session).
+
+1. **Measure stock's DRM framebuffer `pitch` during a live commit.** The
+   decisive number: if `eink_ldl=412` is right, stock's packed line is far
+   shorter than the GSI's 1648 bytes and the ratio is the answer. Needs root on
+   stock — reflash `work/root/magisk_patched-30700_TKoNu.img` +
+   `work/releases/system-debloat-v1.img`, install the Magisk APK.
+2. **Reverse `DRM_IOCTL_EINK_UPDATE`** — ioctl number and struct layout, from
+   the kernel in `work/backup/out/boot_a.bin`. Offline work. Would allow driving
+   the panel directly from userspace, bypassing SurfaceFlinger; the long-term
+   answer for objectives 4 *and* 5.
+3. **Why does the vendor HWC reject every layer?** Stock composes 8 CLIENT +
+   5 DEVICE; the GSI 100% CLIENT. `HWCDisplay::validate` /
+   `getClientTargetSupport` in `hwcomposer.mt6877.so`.
+4. Kernel frame dumps via `save_level` → `/data/bmp/` (create it first; level 1
+   produced nothing, semantics unknown). Writing `/sys/...` is **RED**.
+
+Lower priority, still open:
+- `COLOR_MODE_MAGAZINE = 1` is the last untested cell in the R5 table — set
+  Magazine on any app and diff `/data/system/disp_policy.db`.
+- TrebleDroid A15 (`work/gsi/td15-system.img`) as a cross-check.
+- LineageOS 23 + phh patches — `docs/lineage-23-gsi-build.md` (cloud VM; it is a
+  port, not a build).
 
 ## Traps hit
 - **A GSI on this device does not fail on e-ink — it fails on the GPU.** The

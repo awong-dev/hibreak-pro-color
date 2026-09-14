@@ -339,6 +339,19 @@ it. See §2.2.
 
 ## 7. Phase 3 — GSI and the colour problem
 
+> ✅ **A GSI boots on this device** (TrebleDroid Android 16 on the Android 12
+> vendor, `boot_completed=1`, root via phh su — 2026-09-13). The panel driver,
+> the LK-loaded waveform and the DRM ioctls all survive.
+>
+> ❌ **The display tiles**: the frame repeated 4× in a quarter of the panel. A
+> **4:1 pixel-packing mismatch** — `eink_ldl = 412 = 1648/4`, the EPD takes four
+> pixels per data unit and gets one byte per pixel. Not colour: the same artefact
+> is reported on the **mono** model, which has no CFA.
+>
+> **→ `docs/pixel-packing-investigation.md` is the entry point.** It carries the
+> evidence, the ruled-out list, and how to rebuild the GSI state (the device was
+> reverted to stock at the end of that session).
+
 ### 7.1 Why this is research, not a recipe
 
 Every published GSI and every e-ink patcher for these phones targets the **mono** HiBreak
@@ -463,6 +476,20 @@ panel and a 1.x vendor. If tried, treat it strictly as a diagnostic.
 
 Use `vbmeta*` from **our own dump**.
 
+⚠️ **dm-verity must be disabled or nothing non-stock boots** — see §6.2. Flags precede
+`flash` (the ordering below is the older form). Our `_b` vbmeta dumps are all-zero, so
+flash only the `_a` set:
+
+```
+fastboot --disable-verity --disable-verification flash vbmeta_a        work/backup/out/vbmeta_a.bin
+fastboot --disable-verity --disable-verification flash vbmeta_system_a work/backup/out/vbmeta_system_a.bin
+fastboot --disable-verity --disable-verification flash vbmeta_vendor_a work/backup/out/vbmeta_vendor_a.bin
+```
+
+`system` is a **logical** partition, so `fastboot reboot fastboot` into fastbootd is
+required before flashing it — and a GSI flash needs `fastboot -w`, because `/data`
+belongs to whichever system formatted it.
+
 ```
 adb reboot bootloader
 fastboot -w
@@ -477,19 +504,32 @@ fastboot flash system work/gsi/<image>.img
 fastboot reboot
 ```
 
-### 7.5 First boot — black screen is expected
+### 7.5 First boot
 
 ```bash
 adb devices                                        # GREEN — is it actually alive?
+```
+
+Keep `scrcpy` running **before** any reboot — it's the only way to see the UI when the
+panel isn't refreshing. That part holds.
+
+⚠️ **The `1008` advice below is wrong for this device.**
+
+```bash
 adb shell service call SurfaceFlinger 1008 i32 1   # disable HW overlays
 ```
 
-Alternatives: power-lock then power-unlock; or `scrcpy` and tick *Disable HW overlays* in
-Developer Options. Keep `scrcpy` running **before** any reboot — it's the only way to see
-the UI when the panel isn't refreshing.
+`1008 i32 1` **forces GPU composition**, and on this unit GPU composition is the path that
+*hangs* — SurfaceFlinger wedges in `libGLES_mali.so` `osup_sync_object_wait` during
+`flushGL()`. It also needs root; as shell it returns `Operation not permitted`. The advice
+comes from the mono model.
 
-On unpatched GSIs the overlay setting resets each boot; bind it to `sys.boot_completed`
-via a Magisk service script.
+What actually fixes the hang here is phh's **Disable SF GL backpressure**
+(`persist.sys.phh.enable_sf_gl_backpressure=false`, §7.6) — with it, SF stops wedging and
+the boot animation completes on its own.
+
+Stock's `1004`/`1005` refresh transactions come from Bigme's `libgui.so` extensions and
+**do not exist** on a GSI (§7.1).
 
 ### 7.6 Phh Treble settings
 
