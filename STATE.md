@@ -1,4 +1,13 @@
 ## Status
+**2026-09-17 — Objective 4 reached.** TrebleDroid Android 16 GSI on the device,
+panel displaying the UI correctly (greyscale) via `tools/hwcshim` in
+`/vendor` (`work/super/vendor_a-hwcshim.img` = xrzfix2 + shim). Root cause of
+the 4× tiling: the vendor HWC committed a CPU-converted gray8 buffer while the
+kernel reads the commit as RGBA and converts itself. Fix = commit the RGBA
+client target. Entry point: `docs/pixel-packing-investigation.md`.
+Currently running: **td16 GSI + vendor_a-hwcshim.img**, dm-verity off, `/data`
+belongs to the GSI, phh su root.
+
 **Device reverted to factory stock 2026-09-13** — stock `super`, stock `boot`
 (unrooted), dm-verity re-enabled, userdata wiped. Bootloader left **unlocked**
 (`verifiedbootstate: orange`, which is what unlocked means — not a fault).
@@ -287,6 +296,20 @@ Lower priority, still open:
   port, not a build).
 
 ## Traps hit
+- Black screen after any `/data` wipe or sometimes plain reboot on the GSI →
+  SF wedged in Mali GL at boot → `setprop persist.sys.phh.enable_sf_gl_backpressure false`
+  (+ `_hwc_`) and `setprop ctl.restart surfaceflinger` as root.
+- `fastboot flash vbmeta_a` from fastbootd → `No such file or directory` →
+  vbmeta is physical; flash it from bootloader fastboot, then `reboot fastboot`
+  for system/vendor.
+- `cp` into a remounted-rw `/vendor` → file truncated to 0, `ENOSPC` even with
+  8 MB free → reflash vendor instead; a 0-byte `hwcomposer.mtk_common.so`
+  breaks composer restart.
+- `resize2fs -M` on the vendor image left ~16 KB free → same symptom, and it
+  was the first thing suspected. `make-vendor.sh` now keeps 8 MiB headroom.
+- `drm_eink_update.stride`/`height` are source **width/height** (rect clamp),
+  not a pitch; `+0x2c` "format" is never read by the kernel.
+
 - **A GSI on this device does not fail on e-ink — it fails on the GPU.** The
   e-ink driver, the LK-loaded waveform and the DRM ioctls all work fine under
   Android 16. SurfaceFlinger wedges inside `/vendor/lib64/egl/libGLES_mali.so`
